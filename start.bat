@@ -53,9 +53,6 @@ if not exist "node_modules" (
     echo.
 )
 
-echo Starting the server. Keep this window open while playing.
-echo Closing this window will end the game.
-echo.
-node server.js
+node menu.js
 
 pause

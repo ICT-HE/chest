@@ -1,41 +1,37 @@
 # LAN Chess
 
 A real two-player chess game (full rules: castling, en passant, promotion,
-check/checkmate detection) that two computers on the **same WiFi/Ethernet
-network** can play against each other — no internet required.
+check/checkmate detection) that computers on the **same WiFi/Ethernet
+network** can play against each other — no internet, no typing addresses.
 
-Browsers can't talk to each other directly, so one computer needs to run a
-tiny local relay server. This works great in a shop/LAN setting: one PC runs
-the server, everyone else just opens a web page.
+## Setup (once per computer)
 
-## Setup (do this once, on ONE computer)
-
-1. Install [Node.js](https://nodejs.org) if it isn't already installed.
-2. Open a terminal in this folder and run:
-   ```
-   npm install
-   node server.js
-   ```
-3. It will print something like:
-   ```
-   On this computer: http://localhost:3000
-   On the same WiFi/network:  http://192.168.1.42:3000
-   ```
-   Note that second address (your LAN IP) — give it to the other player.
+- **Windows**: double-click `start.bat`. If Node.js isn't installed, it installs it automatically (you may see one "allow this app" popup — click Yes).
+- **Mac/Linux**: run `./start.sh` in a terminal (installs dependencies the first time).
 
 ## Playing
 
-No addresses to type — just open a link on each computer:
+Every computer runs the same launcher and picks from a menu:
 
-- **Player 1** (on the server computer): open `http://localhost:3000` in a browser. It connects automatically.
-- **Player 2** (on any other computer on the same network): open the LAN address the server printed, e.g. `http://192.168.1.42:3000`. It connects automatically too.
-- The first person to connect is White, the second is Black. Anyone after that joins as a spectator.
-- Once connected, Player 1's page shows a **Share this address** box with a copyable link — send that to Player 2 (chat, sticky note, shouted across the room, whatever's easiest) instead of dictating the raw address.
-- Playing two games at once in the shop? Add `?room=table2` (or any word) to the end of the address on both computers for that pair — each room is a separate game. If the address doesn't work automatically for some reason, an "enter address manually" option is still there as a fallback.
+```
+  1) Host a game
+  2) Join a game
+```
+
+- **One player picks "Host a game."** It starts the game on that computer and opens it in a browser automatically.
+- **Everyone else picks "Join a game."** It automatically finds games being hosted on the same network and lists them, e.g.:
+  ```
+  Games found:
+    [1] SHOP-PC-2 (192.168.1.42)  —  waiting for a player
+  ```
+  Type the number — the game opens in your browser automatically, no address needed.
+- First to join is White, second is Black. Anyone after that watches as a spectator.
+- If nothing shows up under "Join a game," make sure the host picked "Host a game" first and both computers are on the same network — then choose **R** to search again, or **M** to type the host's address manually as a fallback.
 
 ## Notes
 
-- Everything runs on your local network — nothing leaves the building, no internet needed.
+- Everything runs on your local network — nothing leaves the building.
 - Click a piece to see its legal moves highlighted, then click a destination square.
 - **New Game** resets the board for both players.
-- If the connection drops, just reload the page and reconnect.
+- If the connection drops, reload the page (host) or run "Join a game" again.
+- Some office/guest WiFi networks block the LAN broadcast that auto-discovery relies on — the manual address option (**M**) always works as a backup.

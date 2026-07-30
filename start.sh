@@ -21,7 +21,4 @@ if [ ! -d "node_modules" ]; then
     echo
 fi
 
-echo "Starting the server. Keep this window open while playing."
-echo "Closing this window will end the game."
-echo
-node server.js
+node menu.js

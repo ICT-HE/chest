@@ -25,11 +25,13 @@ the server, everyone else just opens a web page.
 
 ## Playing
 
-- **Player 1** (on the server computer): open `http://localhost:3000` in a browser.
-- **Player 2** (on any other computer on the same network): open the LAN address, e.g. `http://192.168.1.42:3000`.
-- On the connect screen, each player enters the server address (`192.168.1.42:3000`) and clicks **Connect**.
+No addresses to type — just open a link on each computer:
+
+- **Player 1** (on the server computer): open `http://localhost:3000` in a browser. It connects automatically.
+- **Player 2** (on any other computer on the same network): open the LAN address the server printed, e.g. `http://192.168.1.42:3000`. It connects automatically too.
 - The first person to connect is White, the second is Black. Anyone after that joins as a spectator.
-- Optional: use the "room" field if you want multiple separate games running on the same server at once (e.g. two pairs of players — just have each pair type the same room name).
+- Once connected, Player 1's page shows a **Share this address** box with a copyable link — send that to Player 2 (chat, sticky note, shouted across the room, whatever's easiest) instead of dictating the raw address.
+- Playing two games at once in the shop? Add `?room=table2` (or any word) to the end of the address on both computers for that pair — each room is a separate game. If the address doesn't work automatically for some reason, an "enter address manually" option is still there as a fallback.
 
 ## Notes
 

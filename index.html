@@ -215,11 +215,22 @@
 <div class="subtitle">Two boards, one wire &mdash; play across the same network</div>
 
 <div class="panel" id="connect-panel">
-  <label>Server address (given to you by whoever ran the server)</label>
+  <div id="auto-status" style="text-align:center; color:var(--text-dim); font-size:.9rem;">Connecting&hellip;</div>
+  <details id="manual-fallback" style="display:none; margin-top:10px;">
+    <summary style="cursor:pointer; color:var(--brass); font-size:.8rem;">Trouble connecting? Enter the address manually</summary>
+    <div class="row" style="margin-top:10px;">
+      <input type="text" id="server-addr" placeholder="e.g. 192.168.1.42:3000">
+      <input type="text" id="room-name" placeholder="room (optional)" style="max-width:120px">
+      <button id="connect-btn">Connect</button>
+    </div>
+  </details>
+</div>
+
+<div class="panel" id="share-panel" style="display:none;">
+  <label>Share this address so the other player can join &mdash; they just open it in a browser</label>
   <div class="row">
-    <input type="text" id="server-addr" placeholder="e.g. 192.168.1.42:3000">
-    <input type="text" id="room-name" placeholder="room (optional)" style="max-width:120px">
-    <button id="connect-btn">Connect</button>
+    <input type="text" id="share-link" readonly>
+    <button class="secondary" id="copy-link-btn">Copy</button>
   </div>
 </div>
 
@@ -721,19 +732,32 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
   }
 
   // --- connection UI ---
-  document.getElementById('connect-btn').addEventListener('click', connect);
-  document.getElementById('reset-btn').addEventListener('click', ()=>resetGame(true));
-  document.getElementById('server-addr').addEventListener('keydown', e=>{ if(e.key==='Enter') connect(); });
+  const autoStatusEl = document.getElementById('auto-status');
+  const manualFallback = document.getElementById('manual-fallback');
+  const sharePanel = document.getElementById('share-panel');
+  const shareLinkInput = document.getElementById('share-link');
 
-  function connect(){
+  document.getElementById('connect-btn').addEventListener('click', ()=>{
     const addr = document.getElementById('server-addr').value.trim();
     const room = document.getElementById('room-name').value.trim() || 'lobby';
-    if(!addr) return;
+    if(addr) connect(addr, room);
+  });
+  document.getElementById('reset-btn').addEventListener('click', ()=>resetGame(true));
+  document.getElementById('server-addr').addEventListener('keydown', e=>{
+    if(e.key==='Enter') document.getElementById('connect-btn').click();
+  });
+  document.getElementById('copy-link-btn').addEventListener('click', ()=>{
+    shareLinkInput.select();
+    navigator.clipboard && navigator.clipboard.writeText(shareLinkInput.value).catch(()=>{});
+    document.execCommand && document.execCommand('copy');
+  });
+
+  function connect(addr, room){
     const url = `ws://${addr}?room=${encodeURIComponent(room)}`;
     try{
       ws = new WebSocket(url);
     }catch(e){
-      alert('Could not connect: ' + e.message);
+      showManualFallback('Could not connect: ' + e.message);
       return;
     }
 
@@ -743,6 +767,8 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
       boardWrap.style.display = 'block';
       metaEl.style.display = 'flex';
       historyEl.style.display = 'block';
+      sharePanel.style.display = 'block';
+      shareLinkInput.value = location.origin + location.pathname + (room!=='lobby' ? ('?room='+encodeURIComponent(room)) : '');
       render();
     });
 
@@ -757,6 +783,8 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
         badgeWhite.className = 'badge ' + (msg.white?'on':'off');
         badgeBlack.textContent = 'Black' + (msg.black?' ●':'');
         badgeBlack.className = 'badge ' + (msg.black?'on':'off');
+        // once both seats are filled, the share link isn't needed anymore
+        if(msg.white && msg.black) sharePanel.style.display = 'none';
       } else if(msg.type==='move'){
         applyRemoteMove(msg.move);
       } else if(msg.type==='reset'){
@@ -768,9 +796,28 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
       gameStatusEl.textContent = 'Disconnected from server';
     });
     ws.addEventListener('error', ()=>{
-      alert('Connection failed. Check the address and that the server is running.');
+      showManualFallback('Could not reach a chess server at ' + addr + '. Check the address and that the server is running.');
     });
   }
+
+  function showManualFallback(message){
+    autoStatusEl.textContent = message;
+    manualFallback.style.display = 'block';
+    manualFallback.open = true;
+    const addrInput = document.getElementById('server-addr');
+    if(!addrInput.value) addrInput.value = location.host;
+  }
+
+  // --- auto-connect using the address this page was loaded from ---
+  (function autoConnect(){
+    const params = new URLSearchParams(location.search);
+    const room = params.get('room') || 'lobby';
+    if(location.protocol === 'file:' || !location.host){
+      showManualFallback('Enter the server address to connect.');
+      return;
+    }
+    connect(location.host, room);
+  })();
 
   render();
 })();

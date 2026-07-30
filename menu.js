@@ -62,7 +62,19 @@ function printBanner() {
 // ---------------------------------------------------------------------
 // HOST
 // ---------------------------------------------------------------------
-function hostGame() {
+async function hostGame() {
+  console.log('Checking this network for an existing game...\n');
+  const existing = await discover(1500);
+  if (existing.length > 0) {
+    console.log('A game is already being hosted on this network:');
+    existing.forEach(g => console.log(`  - ${g.hostname} (${g.address}) — ${g.status === 'open' ? 'waiting for a player' : 'full'}`));
+    console.log('\nIf you want to play against them, choose "Join a game" instead —');
+    console.log('hosting a second, separate game here will NOT connect to theirs.\n');
+    const answer = await ask('Host a new separate game anyway? (y/N): ');
+    if (answer.toLowerCase() !== 'y') return mainMenu();
+    console.log('');
+  }
+
   const { rooms } = createServer(HTTP_PORT);
   const addrs = localAddresses();
 
@@ -189,7 +201,7 @@ async function mainMenu() {
   const choice = await ask('Choose 1 or 2: ');
 
   if (choice === '1') {
-    hostGame();
+    await hostGame();
   } else if (choice === '2') {
     await joinGame();
   } else {

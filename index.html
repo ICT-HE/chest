@@ -105,16 +105,37 @@
     font-size:.85rem;
   }
   .badge{
-    padding:3px 10px;
+    padding:3px 10px 3px 8px;
     border-radius:20px;
     font-size:.7rem;
     letter-spacing:.05em;
     text-transform:uppercase;
     border:1px solid var(--panel-line);
     color:var(--text-dim);
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
   }
+  .badge .dot{ width:9px; height:9px; border-radius:50%; display:inline-block; flex-shrink:0; }
+  .badge .dot.dot-white{ background:#f3ead8; border:1px solid #a89972; }
+  .badge .dot.dot-black{ background:#111815; border:1px solid #55605a; }
   .badge.on{ color:#c8f0d8; border-color:#3f7a56; background:#1e3527; }
-  .badge.off{ color:#f0c8c8; border-color:#7a3f3f; background:#352020; }
+  .badge.off{ color:#8a988e; border-color:var(--panel-line); background:transparent; opacity:.7; }
+
+  #waiting-banner{
+    width:min(92vw, 480px);
+    text-align:center;
+    background:#2e2412;
+    border:1px solid var(--brass-dim);
+    color:var(--brass);
+    padding:9px 14px;
+    border-radius:6px;
+    font-size:.85rem;
+    letter-spacing:.02em;
+    margin-bottom:12px;
+    animation: pulse 1.8s ease-in-out infinite;
+  }
+  @keyframes pulse{ 0%,100%{ opacity:1; } 50%{ opacity:.55; } }
 
   #turn-indicator{ color:var(--ivory); }
   #turn-indicator b{ color:var(--brass); }
@@ -234,11 +255,13 @@
   </div>
 </div>
 
+<div id="waiting-banner" style="display:none;"></div>
+
 <div id="status-line" style="display:none;">
   <div id="turn-indicator">You are <b id="my-color">--</b></div>
   <div class="row" style="gap:8px;">
-    <span class="badge off" id="badge-white">White</span>
-    <span class="badge off" id="badge-black">Black</span>
+    <span class="badge off" id="badge-white"><span class="dot dot-white"></span>White</span>
+    <span class="badge off" id="badge-black"><span class="dot dot-black"></span>Black</span>
   </div>
 </div>
 
@@ -559,6 +582,7 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
   const boardEl = document.getElementById('board');
   const coordsEl = document.getElementById('coords-file');
   const statusLine = document.getElementById('status-line');
+  const waitingBanner = document.getElementById('waiting-banner');
   const boardWrap = document.getElementById('board-wrap');
   const metaEl = document.getElementById('meta');
   const historyEl = document.getElementById('history');
@@ -779,12 +803,18 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
         myColor = msg.color==='white'?'w':msg.color==='black'?'b':'spectator';
         render();
       } else if(msg.type==='presence'){
-        badgeWhite.textContent = 'White' + (msg.white?' ●':'');
+        badgeWhite.innerHTML = '<span class="dot dot-white"></span>White' + (msg.white?' ●':'');
         badgeWhite.className = 'badge ' + (msg.white?'on':'off');
-        badgeBlack.textContent = 'Black' + (msg.black?' ●':'');
+        badgeBlack.innerHTML = '<span class="dot dot-black"></span>Black' + (msg.black?' ●':'');
         badgeBlack.className = 'badge ' + (msg.black?'on':'off');
-        // once both seats are filled, the share link isn't needed anymore
-        if(msg.white && msg.black) sharePanel.style.display = 'none';
+        if(msg.white && msg.black){
+          sharePanel.style.display = 'none';
+          waitingBanner.style.display = 'none';
+        } else {
+          const missing = !msg.white ? 'White' : 'Black';
+          waitingBanner.textContent = `Waiting for ${missing} to join\u2026`;
+          waitingBanner.style.display = 'block';
+        }
       } else if(msg.type==='move'){
         applyRemoteMove(msg.move);
       } else if(msg.type==='reset'){

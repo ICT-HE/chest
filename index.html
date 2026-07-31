@@ -142,6 +142,33 @@
   }
   @keyframes pulse{ 0%,100%{ opacity:1; } 50%{ opacity:.55; } }
 
+  #captured-panel{
+    width:min(92vw, 480px);
+    margin-bottom:10px;
+    font-size:.8rem;
+    color:var(--text-dim);
+  }
+  .captured-row{ display:flex; align-items:center; gap:8px; min-height:1.4em; }
+  .captured-label{ flex-shrink:0; letter-spacing:.03em; }
+  .captured-pieces{ font-size:1.1rem; letter-spacing:1px; }
+  .captured-pieces .pc{ font-size:1rem; }
+
+  #restart-request-banner{
+    width:min(92vw, 480px);
+    background:#20304a;
+    border:1px solid #4a6a9c;
+    color:#cfe0f5;
+    padding:10px 14px;
+    border-radius:6px;
+    font-size:.85rem;
+    margin-top:10px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+  }
+  #restart-request-banner button{ padding:6px 12px; font-size:.75rem; }
+
   #turn-indicator{ color:var(--ivory); }
   #turn-indicator b{ color:var(--brass); }
 
@@ -167,16 +194,16 @@
   }
   .sq.light{ background:var(--light); }
   .sq.dark{ background:var(--dark); }
-  .sq .pc{ pointer-events:none; }
+  .sq .pc{ pointer-events:none; display:inline-block; will-change:transform; }
   .sq .pc.piece-white{
-    color:#f5ecd8;
-    -webkit-text-stroke: 1.3px #2a2013;
-    text-shadow: -1px -1px 0 #2a2013, 1px -1px 0 #2a2013, -1px 1px 0 #2a2013, 1px 1px 0 #2a2013, 0 2px 3px rgba(0,0,0,.35);
+    color:#ffffff;
+    -webkit-text-stroke: 1.6px #000000;
+    text-shadow: -1.5px -1.5px 0 #000, 1.5px -1.5px 0 #000, -1.5px 1.5px 0 #000, 1.5px 1.5px 0 #000, 0 3px 4px rgba(0,0,0,.45);
   }
   .sq .pc.piece-black{
-    color:#131313;
-    -webkit-text-stroke: 1px #ded2ac;
-    text-shadow: -1px -1px 0 #ded2ac, 1px -1px 0 #ded2ac, -1px 1px 0 #ded2ac, 1px 1px 0 #ded2ac, 0 2px 3px rgba(0,0,0,.35);
+    color:#000000;
+    -webkit-text-stroke: 1.6px #ffffff;
+    text-shadow: -1.5px -1.5px 0 #fff, 1.5px -1.5px 0 #fff, -1.5px 1.5px 0 #fff, 1.5px 1.5px 0 #fff, 0 3px 4px rgba(0,0,0,.35);
   }
   .sq.selected{ outline:3px solid var(--brass) inset; }
   .sq.lastmove{ box-shadow:inset 0 0 0 999px rgba(201,162,74,.28); }
@@ -282,6 +309,11 @@
   </div>
 </div>
 
+<div id="captured-panel" style="display:none;">
+  <div class="captured-row"><span class="captured-label">White has taken</span><span id="captured-by-white" class="captured-pieces"></span></div>
+  <div class="captured-row"><span class="captured-label">Black has taken</span><span id="captured-by-black" class="captured-pieces"></span></div>
+</div>
+
 <div id="board-wrap" style="display:none;">
   <div id="board"></div>
   <div id="coords-file"></div>
@@ -289,8 +321,13 @@
 
 <div id="meta" style="display:none;">
   <span id="game-status">In progress</span>
-  <button class="secondary" id="reset-btn">New Game</button>
+  <div class="row" style="gap:8px;">
+    <button class="secondary" id="resign-btn">Resign</button>
+    <button class="secondary" id="reset-btn">New Game</button>
+  </div>
 </div>
+
+<div id="restart-request-banner" style="display:none;"></div>
 
 <div id="history" style="display:none;"></div>
 
@@ -601,6 +638,8 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
   let blackConnected = false;
   let flip = false;         // true = show the board from Black's side (rank 8 at the bottom)
   let squareEls = null;     // [r][c] -> DOM element, built once per orientation
+  let resignedColor = null; // 'w' | 'b' | null — set once someone resigns
+  let awaitingRestartApproval = false; // true once WE'VE asked to restart and are waiting
 
   const boardEl = document.getElementById('board');
   const coordsEl = document.getElementById('coords-file');
@@ -613,6 +652,34 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
   const gameStatusEl = document.getElementById('game-status');
   const badgeWhite = document.getElementById('badge-white');
   const badgeBlack = document.getElementById('badge-black');
+  const capturedPanel = document.getElementById('captured-panel');
+  const capturedByWhiteEl = document.getElementById('captured-by-white');
+  const capturedByBlackEl = document.getElementById('captured-by-black');
+  const restartBanner = document.getElementById('restart-request-banner');
+
+  function showRestartBanner(text, buttons){
+    restartBanner.innerHTML = '';
+    const span = document.createElement('span');
+    span.textContent = text;
+    restartBanner.appendChild(span);
+    if(buttons && buttons.length){
+      const row = document.createElement('div');
+      row.style.display = 'flex';
+      row.style.gap = '8px';
+      buttons.forEach(b=>{
+        const btn = document.createElement('button');
+        btn.className = 'secondary';
+        btn.textContent = b.label;
+        btn.addEventListener('click', b.onClick);
+        row.appendChild(btn);
+      });
+      restartBanner.appendChild(row);
+    }
+    restartBanner.style.display = 'flex';
+  }
+  function hideRestartBanner(){
+    restartBanner.style.display = 'none';
+  }
 
   function updateCoordLabels(){
     coordsEl.innerHTML = '';
@@ -694,7 +761,9 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
 
     let statusText;
     const turnName = state.turn==='w' ? 'White' : 'Black';
-    if(status.kind==='checkmate') statusText = `Checkmate — ${status.winner==='w'?'White':'Black'} wins`;
+    if(resignedColor){
+      statusText = `${resignedColor==='w'?'White':'Black'} resigned — ${resignedColor==='w'?'Black':'White'} wins`;
+    } else if(status.kind==='checkmate') statusText = `Checkmate — ${status.winner==='w'?'White':'Black'} wins`;
     else if(status.kind==='stalemate') statusText = 'Stalemate — draw';
     else if(status.kind==='draw') statusText = `Draw (${status.reason})`;
     else if(status.kind==='check') statusText = `${turnName} to move — in check`;
@@ -702,17 +771,24 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
     gameStatusEl.textContent = statusText;
 
     // highlight whichever badge belongs to the side that's actually to move
-    const whiteTurn = bothConnected && state.turn==='w';
-    const blackTurn = bothConnected && state.turn==='b';
+    const whiteTurn = bothConnected && state.turn==='w' && !resignedColor;
+    const blackTurn = bothConnected && state.turn==='b' && !resignedColor;
     badgeWhite.innerHTML = '<span class="dot dot-white"></span>White' + (whiteConnected?' ●':'');
     badgeWhite.className = 'badge ' + (whiteConnected?'on':'off') + (whiteTurn?' turn':'');
     badgeBlack.innerHTML = '<span class="dot dot-black"></span>Black' + (blackConnected?' ●':'');
     badgeBlack.className = 'badge ' + (blackConnected?'on':'off') + (blackTurn?' turn':'');
+
+    // captured-pieces tracker: pieces WHITE has taken are Black pieces, and vice versa
+    capturedByWhiteEl.innerHTML = capturedBlack.map(t=>
+      `<span class="pc piece-black">${PIECE_GLYPH['b'+t]}\uFE0E</span>`).join('');
+    capturedByBlackEl.innerHTML = capturedWhite.map(t=>
+      `<span class="pc piece-white">${PIECE_GLYPH['w'+t]}\uFE0E</span>`).join('');
   }
 
   function onSquareClick(r,c){
     if(pendingPromotion) return;
     if(!bothConnected) return; // wait until both White and Black have joined
+    if(resignedColor) return; // game already ended by resignation
     if(myColor!=='w' && myColor!=='b') return; // spectators can't move
     if(state.turn!==myColor) return;
 
@@ -779,23 +855,80 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
 
   let appliedMoveCount = 0;
 
+  let capturedWhite = []; // piece types of WHITE pieces that have been captured (i.e. taken by Black)
+  let capturedBlack = []; // piece types of BLACK pieces that have been captured (i.e. taken by White)
+
+  function recordCapture(beforeState, move){
+    if(!move.capture) return;
+    let capturedPiece;
+    if(move.enpassant){
+      const moverColor = beforeState.board[move.from.r][move.from.c].color;
+      capturedPiece = { type:'P', color: moverColor==='w' ? 'b' : 'w' };
+    } else {
+      capturedPiece = beforeState.board[move.to.r][move.to.c];
+    }
+    if(!capturedPiece) return;
+    if(capturedPiece.color==='w') capturedWhite.push(capturedPiece.type);
+    else capturedBlack.push(capturedPiece.type);
+  }
+
+  // Classic FLIP animation: the grid squares themselves never move, so we
+  // just need the pixel offset between the two (already-rendered) squares.
+  // Snap the piece back to where it visually was with no transition, then
+  // release it with one — the browser animates the slide for us.
+  const raf = (typeof requestAnimationFrame==='function') ? requestAnimationFrame : (fn)=>setTimeout(fn,16);
+  function animatePieceSlide(fromR, fromC, toR, toC){
+    if(!squareEls) return;
+    const fromEl = squareEls[fromR] && squareEls[fromR][fromC];
+    const toEl = squareEls[toR] && squareEls[toR][toC];
+    if(!fromEl || !toEl) return;
+    const pieceSpan = toEl.querySelector('.pc');
+    if(!pieceSpan) return;
+    const fromRect = fromEl.getBoundingClientRect();
+    const toRect = toEl.getBoundingClientRect();
+    const dx = fromRect.left - toRect.left;
+    const dy = fromRect.top - toRect.top;
+    if(!dx && !dy) return;
+    pieceSpan.style.transition = 'none';
+    pieceSpan.style.transform = `translate(${dx}px, ${dy}px)`;
+    void pieceSpan.offsetWidth; // force reflow so the browser registers the start position
+    raf(()=>{
+      pieceSpan.style.transition = 'transform 200ms cubic-bezier(.2,.7,.3,1)';
+      pieceSpan.style.transform = 'translate(0,0)';
+    });
+  }
+
   function doMove(move){
+    recordCapture(state, move);
     state = applyMove(state, move);
     lastMove = move;
     appliedMoveCount++;
     selected = null; legalForSelected = [];
     logMove(move);
     render();
+    animatePieceSlide(move.from.r, move.from.c, move.to.r, move.to.c);
+    if(move.castle){
+      const home = move.from.r;
+      if(move.castle==='K') animatePieceSlide(home,7,home,5);
+      else animatePieceSlide(home,0,home,3);
+    }
     sendMsg({type:'move', move});
   }
 
   function applyRemoteMove(move){
+    recordCapture(state, move);
     state = applyMove(state, move);
     lastMove = move;
     appliedMoveCount++;
     selected = null; legalForSelected = [];
     logMove(move);
     render();
+    animatePieceSlide(move.from.r, move.from.c, move.to.r, move.to.c);
+    if(move.castle){
+      const home = move.from.r;
+      if(move.castle==='K') animatePieceSlide(home,7,home,5);
+      else animatePieceSlide(home,0,home,3);
+    }
   }
 
   // Rebuilds the board from scratch by replaying the server's authoritative
@@ -809,8 +942,10 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
     state = newGameState();
     lastMove = null;
     selected = null; legalForSelected = [];
+    capturedWhite = []; capturedBlack = [];
     historyEl.innerHTML = '';
     for(const move of moves){
+      recordCapture(state, move);
       state = applyMove(state, move);
       lastMove = move;
       logMove(move);
@@ -837,6 +972,10 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
     state = newGameState();
     selected = null; legalForSelected = []; lastMove = null;
     appliedMoveCount = 0;
+    capturedWhite = []; capturedBlack = [];
+    resignedColor = null;
+    awaitingRestartApproval = false;
+    hideRestartBanner();
     historyEl.innerHTML = '';
     render();
     if(broadcast) sendMsg({type:'reset'});
@@ -857,7 +996,7 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
   // few seconds (cheap — it's a no-op unless we're actually behind) and
   // also re-sync immediately the moment this window becomes visible/
   // focused again, so you never need to manually refresh.
-  setInterval(requestSync, 3000);
+  setInterval(requestSync, 1200);
   document.addEventListener('visibilitychange', ()=>{
     if(document.visibilityState === 'visible') requestSync();
   });
@@ -874,7 +1013,27 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
     const room = document.getElementById('room-name').value.trim() || 'lobby';
     if(addr) connect(addr, room);
   });
-  document.getElementById('reset-btn').addEventListener('click', ()=>resetGame(true));
+  document.getElementById('reset-btn').addEventListener('click', ()=>{
+    if(!bothConnected){ resetGame(true); return; } // no one to ask permission from
+    if(awaitingRestartApproval) return;
+    awaitingRestartApproval = true;
+    sendMsg({type:'restartRequest'});
+    const otherName = myColor==='w' ? 'Black' : 'White';
+    showRestartBanner(`Waiting for ${otherName} to accept your request to start a new game\u2026`, [
+      {label:'Cancel', onClick:()=>{
+        awaitingRestartApproval = false;
+        sendMsg({type:'restartCancel'});
+        hideRestartBanner();
+      }}
+    ]);
+  });
+  document.getElementById('resign-btn').addEventListener('click', ()=>{
+    if(myColor!=='w' && myColor!=='b') return;
+    if(resignedColor) return;
+    resignedColor = myColor;
+    sendMsg({type:'resign', color: myColor});
+    render();
+  });
   document.getElementById('server-addr').addEventListener('keydown', e=>{
     if(e.key==='Enter') document.getElementById('connect-btn').click();
   });
@@ -904,6 +1063,7 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
       boardWrap.style.display = 'block';
       metaEl.style.display = 'flex';
       historyEl.style.display = 'block';
+      capturedPanel.style.display = 'block';
       sharePanel.style.display = 'block';
       shareLinkInput.value = location.origin + location.pathname + (room!=='lobby' ? ('?room='+encodeURIComponent(room)) : '');
       render();
@@ -936,6 +1096,27 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
         applyRemoteMove(msg.move);
       } else if(msg.type==='reset'){
         resetGame(false);
+      } else if(msg.type==='resign'){
+        resignedColor = msg.color;
+        render();
+      } else if(msg.type==='restartRequest'){
+        const requesterName = myColor==='w' ? 'Black' : 'White';
+        showRestartBanner(`${requesterName} wants to start a new game.`, [
+          {label:'Accept', onClick:()=>{ sendMsg({type:'restartAccept'}); resetGame(true); }},
+          {label:'Decline', onClick:()=>{ sendMsg({type:'restartDecline'}); hideRestartBanner(); }}
+        ]);
+      } else if(msg.type==='restartAccept'){
+        awaitingRestartApproval = false;
+        hideRestartBanner();
+        // the accepting player also sends an actual 'reset', which arrives
+        // right after this and resets the board — nothing else to do here
+      } else if(msg.type==='restartDecline'){
+        awaitingRestartApproval = false;
+        showRestartBanner('Your request to start a new game was declined.', [
+          {label:'OK', onClick: hideRestartBanner}
+        ]);
+      } else if(msg.type==='restartCancel'){
+        hideRestartBanner();
       }
     });
 
@@ -944,7 +1125,7 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
       gameStatusEl.textContent = 'Reconnecting\u2026';
       boardWrap.classList.add('waiting');
       reconnectAttempt++;
-      const delay = Math.min(1000 * reconnectAttempt, 5000);
+      const delay = Math.min(500 * reconnectAttempt, 2000);
       clearTimeout(reconnectTimer);
       reconnectTimer = setTimeout(()=> connect(addr, room), delay);
     });

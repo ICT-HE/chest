@@ -68,7 +68,9 @@ function createServer(port) {
       } else if (msg.type === 'reset') {
         room.moves = [];
         relay(room, ws, raw);
-      } else if (msg.type === 'chat') {
+      } else if (msg.type === 'chat' || msg.type === 'resign' ||
+                 msg.type === 'restartRequest' || msg.type === 'restartAccept' ||
+                 msg.type === 'restartDecline' || msg.type === 'restartCancel') {
         relay(room, ws, raw);
       } else if (msg.type === 'requestSync') {
         // lets a client re-align itself with the server's authoritative

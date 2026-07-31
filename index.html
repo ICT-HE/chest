@@ -181,6 +181,8 @@
   }
   .sq.check{ box-shadow:inset 0 0 0 999px rgba(201,105,74,.45); }
 
+  #board-wrap.waiting{ opacity:.45; pointer-events:none; }
+
   #coords-file{
     display:grid;
     grid-template-columns: repeat(8, min(11vw, 62px));
@@ -578,6 +580,7 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
   let lastMove = null;
   let ws = null;
   let pendingPromotion = null;
+  let bothConnected = false;
 
   const boardEl = document.getElementById('board');
   const coordsEl = document.getElementById('coords-file');
@@ -648,6 +651,7 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
 
   function onSquareClick(r,c){
     if(pendingPromotion) return;
+    if(!bothConnected) return; // wait until both White and Black have joined
     if(myColor!=='w' && myColor!=='b') return; // spectators can't move
     if(state.turn!==myColor) return;
 
@@ -729,6 +733,23 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
     render();
   }
 
+  // Rebuilds the board from scratch by replaying the server's authoritative
+  // move history. Used when this client first connects (so a player who
+  // joins mid-game starts from the correct position instead of a blank
+  // board) and is safe to call at any time to re-align with the server.
+  function syncFromHistory(moves){
+    state = newGameState();
+    lastMove = null;
+    selected = null; legalForSelected = [];
+    historyEl.innerHTML = '';
+    for(const move of moves){
+      state = applyMove(state, move);
+      lastMove = move;
+      logMove(move);
+    }
+    render();
+  }
+
   function logMove(move){
     const from = squareName(move.from.r, move.from.c);
     const to = squareName(move.to.r, move.to.c);
@@ -802,12 +823,16 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
       if(msg.type==='assign'){
         myColor = msg.color==='white'?'w':msg.color==='black'?'b':'spectator';
         render();
+      } else if(msg.type==='sync'){
+        syncFromHistory(msg.moves);
       } else if(msg.type==='presence'){
         badgeWhite.innerHTML = '<span class="dot dot-white"></span>White' + (msg.white?' ●':'');
         badgeWhite.className = 'badge ' + (msg.white?'on':'off');
         badgeBlack.innerHTML = '<span class="dot dot-black"></span>Black' + (msg.black?' ●':'');
         badgeBlack.className = 'badge ' + (msg.black?'on':'off');
-        if(msg.white && msg.black){
+        bothConnected = !!(msg.white && msg.black);
+        boardWrap.classList.toggle('waiting', !bothConnected);
+        if(bothConnected){
           sharePanel.style.display = 'none';
           waitingBanner.style.display = 'none';
         } else {

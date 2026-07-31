@@ -30,7 +30,7 @@ function createServer(port) {
   const rooms = new Map(); // roomName -> { white, black, spectators: Set }
 
   function getRoom(name) {
-    if (!rooms.has(name)) rooms.set(name, { white: null, black: null, spectators: new Set() });
+    if (!rooms.has(name)) rooms.set(name, { white: null, black: null, spectators: new Set(), moves: [] });
     return rooms.get(name);
   }
 
@@ -47,13 +47,22 @@ function createServer(port) {
     ws.role = role;
     ws.roomName = roomName;
     ws.send(JSON.stringify({ type: 'assign', color: role }));
+    // catch this client up on every move already played in the room, so a
+    // player who joins mid-game (or reconnects) starts from the same position
+    ws.send(JSON.stringify({ type: 'sync', moves: room.moves }));
 
     broadcastPresence(room);
 
     ws.on('message', (raw) => {
       let msg;
       try { msg = JSON.parse(raw); } catch { return; }
-      if (msg.type === 'move' || msg.type === 'reset' || msg.type === 'chat') {
+      if (msg.type === 'move') {
+        room.moves.push(msg.move);
+        relay(room, ws, raw);
+      } else if (msg.type === 'reset') {
+        room.moves = [];
+        relay(room, ws, raw);
+      } else if (msg.type === 'chat') {
         relay(room, ws, raw);
       }
     });

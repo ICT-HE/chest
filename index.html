@@ -857,6 +857,10 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
     document.execCommand && document.execCommand('copy');
   });
 
+  let reconnectAttempt = 0;
+  let reconnectTimer = null;
+  let intentionalClose = false;
+
   function connect(addr, room){
     const url = `ws://${addr}?room=${encodeURIComponent(room)}`;
     try{
@@ -867,6 +871,7 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
     }
 
     ws.addEventListener('open', ()=>{
+      reconnectAttempt = 0;
       document.getElementById('connect-panel').style.display = 'none';
       statusLine.style.display = 'flex';
       boardWrap.style.display = 'block';
@@ -908,10 +913,18 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
     });
 
     ws.addEventListener('close', ()=>{
-      gameStatusEl.textContent = 'Disconnected from server';
+      if(intentionalClose) return;
+      gameStatusEl.textContent = 'Reconnecting\u2026';
+      boardWrap.classList.add('waiting');
+      reconnectAttempt++;
+      const delay = Math.min(1000 * reconnectAttempt, 5000);
+      clearTimeout(reconnectTimer);
+      reconnectTimer = setTimeout(()=> connect(addr, room), delay);
     });
     ws.addEventListener('error', ()=>{
-      showManualFallback('Could not reach a chess server at ' + addr + '. Check the address and that the server is running.');
+      if(reconnectAttempt === 0){
+        showManualFallback('Could not reach a chess server at ' + addr + '. Check the address and that the server is running.');
+      }
     });
   }
 

@@ -21,7 +21,9 @@ function createServer(port) {
       }
       const ext = path.extname(filePath);
       const type = ext === '.html' ? 'text/html' : ext === '.js' ? 'application/javascript' : 'text/plain';
-      res.writeHead(200, { 'Content-Type': type });
+      // always serve the freshest copy — never let the browser cache a stale
+      // version of the game (which would make two tabs run different code)
+      res.writeHead(200, { 'Content-Type': type, 'Cache-Control': 'no-store' });
       res.end(data);
     });
   });
@@ -46,6 +48,9 @@ function createServer(port) {
 
     ws.role = role;
     ws.roomName = roomName;
+    ws.isAlive = true;
+    ws.on('pong', () => { ws.isAlive = true; });
+
     ws.send(JSON.stringify({ type: 'assign', color: role }));
     // catch this client up on every move already played in the room, so a
     // player who joins mid-game (or reconnects) starts from the same position
@@ -74,6 +79,20 @@ function createServer(port) {
       broadcastPresence(room);
     });
   });
+
+  // Many WiFi routers silently drop an idle connection after 30-60s of no
+  // traffic (no close/error event fires — it just stops delivering data).
+  // Pinging periodically keeps the connection alive through that, and lets
+  // us detect + clean up any connection that really has died so its seat
+  // (white/black) frees up for a reconnect.
+  const heartbeat = setInterval(() => {
+    wss.clients.forEach((ws) => {
+      if (ws.isAlive === false) return ws.terminate();
+      ws.isAlive = false;
+      try { ws.ping(); } catch {}
+    });
+  }, 20000);
+  wss.on('close', () => clearInterval(heartbeat));
 
   function relay(room, sender, raw) {
     const all = [room.white, room.black, ...room.spectators].filter(Boolean);

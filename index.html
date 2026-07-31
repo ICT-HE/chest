@@ -121,6 +121,11 @@
   .badge .dot.dot-black{ background:#111815; border:1px solid #55605a; }
   .badge.on{ color:#c8f0d8; border-color:#3f7a56; background:#1e3527; }
   .badge.off{ color:#8a988e; border-color:var(--panel-line); background:transparent; opacity:.7; }
+  .badge.turn{
+    border-color:var(--brass);
+    box-shadow:0 0 0 1px var(--brass), 0 0 10px rgba(201,162,74,.45);
+    color:var(--brass);
+  }
 
   #waiting-banner{
     width:min(92vw, 480px);
@@ -162,7 +167,17 @@
   }
   .sq.light{ background:var(--light); }
   .sq.dark{ background:var(--dark); }
-  .sq .pc{ pointer-events:none; filter:drop-shadow(0 2px 1px rgba(0,0,0,.35)); }
+  .sq .pc{ pointer-events:none; }
+  .sq .pc.piece-white{
+    color:#f5ecd8;
+    -webkit-text-stroke: 1.3px #2a2013;
+    text-shadow: -1px -1px 0 #2a2013, 1px -1px 0 #2a2013, -1px 1px 0 #2a2013, 1px 1px 0 #2a2013, 0 2px 3px rgba(0,0,0,.35);
+  }
+  .sq .pc.piece-black{
+    color:#131313;
+    -webkit-text-stroke: 1px #ded2ac;
+    text-shadow: -1px -1px 0 #ded2ac, 1px -1px 0 #ded2ac, -1px 1px 0 #ded2ac, 1px 1px 0 #ded2ac, 0 2px 3px rgba(0,0,0,.35);
+  }
   .sq.selected{ outline:3px solid var(--brass) inset; }
   .sq.lastmove{ box-shadow:inset 0 0 0 999px rgba(201,162,74,.28); }
   .sq .dot{
@@ -581,6 +596,10 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
   let ws = null;
   let pendingPromotion = null;
   let bothConnected = false;
+  let whiteConnected = false;
+  let blackConnected = false;
+  let flip = false;         // true = show the board from Black's side (rank 8 at the bottom)
+  let squareEls = null;     // [r][c] -> DOM element, built once per orientation
 
   const boardEl = document.getElementById('board');
   const coordsEl = document.getElementById('coords-file');
@@ -594,22 +613,56 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
   const badgeWhite = document.getElementById('badge-white');
   const badgeBlack = document.getElementById('badge-black');
 
-  FILES.forEach(f=>{
-    const s = document.createElement('span');
-    s.textContent = f;
-    coordsEl.appendChild(s);
-  });
+  function updateCoordLabels(){
+    coordsEl.innerHTML = '';
+    const order = flip ? [...FILES].reverse() : FILES;
+    order.forEach(f=>{
+      const s = document.createElement('span');
+      s.textContent = f;
+      coordsEl.appendChild(s);
+    });
+  }
+  updateCoordLabels();
+
+  // Builds the 64 square elements once (in the correct visual order for the
+  // current orientation) and wires up their click handlers. After this,
+  // render() only ever updates the *content* of these existing elements —
+  // it never tears down and rebuilds the grid, so moves update instantly
+  // without any full-page flicker or "refresh" feeling.
+  function buildBoard(){
+    boardEl.innerHTML = '';
+    squareEls = Array.from({length:8}, ()=>Array(8).fill(null));
+    for(let vr=0; vr<8; vr++){
+      for(let vc=0; vc<8; vc++){
+        const r = flip ? 7-vr : vr;
+        const c = flip ? 7-vc : vc;
+        const sq = document.createElement('div');
+        sq.className = 'sq ' + (((r+c)%2===0) ? 'light':'dark');
+        sq.dataset.r = r; sq.dataset.c = c;
+        sq.addEventListener('click', ()=>onSquareClick(r,c));
+        boardEl.appendChild(sq);
+        squareEls[r][c] = sq;
+      }
+    }
+  }
+  buildBoard();
+
+  function setOrientation(color){
+    flip = (color === 'b');
+    buildBoard();
+    updateCoordLabels();
+  }
 
   function render(){
-    boardEl.innerHTML = '';
+    if(!squareEls) buildBoard();
     const status = gameStatus(state);
     const kingPos = status.kind==='check' || status.kind==='checkmate' ? findKing(state, state.turn) : null;
 
     for(let r=0;r<8;r++){
       for(let c=0;c<8;c++){
-        const sq = document.createElement('div');
-        sq.className = 'sq ' + (((r+c)%2===0) ? 'light':'dark');
-        sq.dataset.r = r; sq.dataset.c = c;
+        const sq = squareEls[r][c];
+        sq.classList.remove('lastmove','selected','check');
+        sq.innerHTML = '';
 
         if(lastMove && ((lastMove.from.r===r&&lastMove.from.c===c)||(lastMove.to.r===r&&lastMove.to.c===c))){
           sq.classList.add('lastmove');
@@ -620,8 +673,10 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
         const p = state.board[r][c];
         if(p){
           const span = document.createElement('span');
-          span.className = 'pc';
-          span.textContent = PIECE_GLYPH[p.color+p.type];
+          span.className = 'pc ' + (p.color==='w' ? 'piece-white' : 'piece-black');
+          // append U+FE0E so browsers render these as plain colorable glyphs
+          // instead of pre-colored emoji, which is what washes out the color
+          span.textContent = PIECE_GLYPH[p.color+p.type] + '\uFE0E';
           sq.appendChild(span);
         }
 
@@ -631,9 +686,6 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
           marker.className = isTarget.capture ? 'ring' : 'dot';
           sq.appendChild(marker);
         }
-
-        sq.addEventListener('click', ()=>onSquareClick(r,c));
-        boardEl.appendChild(sq);
       }
     }
 
@@ -647,6 +699,14 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
     else if(status.kind==='check') statusText = `${turnName} to move — in check`;
     else statusText = `${turnName} to move`;
     gameStatusEl.textContent = statusText;
+
+    // highlight whichever badge belongs to the side that's actually to move
+    const whiteTurn = bothConnected && state.turn==='w';
+    const blackTurn = bothConnected && state.turn==='b';
+    badgeWhite.innerHTML = '<span class="dot dot-white"></span>White' + (whiteConnected?' ●':'');
+    badgeWhite.className = 'badge ' + (whiteConnected?'on':'off') + (whiteTurn?' turn':'');
+    badgeBlack.innerHTML = '<span class="dot dot-black"></span>Black' + (blackConnected?' ●':'');
+    badgeBlack.className = 'badge ' + (blackConnected?'on':'off') + (blackTurn?' turn':'');
   }
 
   function onSquareClick(r,c){
@@ -822,24 +882,24 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
       try{ msg = JSON.parse(ev.data); } catch { return; }
       if(msg.type==='assign'){
         myColor = msg.color==='white'?'w':msg.color==='black'?'b':'spectator';
+        setOrientation(myColor);
         render();
       } else if(msg.type==='sync'){
         syncFromHistory(msg.moves);
       } else if(msg.type==='presence'){
-        badgeWhite.innerHTML = '<span class="dot dot-white"></span>White' + (msg.white?' ●':'');
-        badgeWhite.className = 'badge ' + (msg.white?'on':'off');
-        badgeBlack.innerHTML = '<span class="dot dot-black"></span>Black' + (msg.black?' ●':'');
-        badgeBlack.className = 'badge ' + (msg.black?'on':'off');
-        bothConnected = !!(msg.white && msg.black);
+        whiteConnected = !!msg.white;
+        blackConnected = !!msg.black;
+        bothConnected = whiteConnected && blackConnected;
         boardWrap.classList.toggle('waiting', !bothConnected);
         if(bothConnected){
           sharePanel.style.display = 'none';
           waitingBanner.style.display = 'none';
         } else {
-          const missing = !msg.white ? 'White' : 'Black';
+          const missing = !whiteConnected ? 'White' : 'Black';
           waitingBanner.textContent = `Waiting for ${missing} to join\u2026`;
           waitingBanner.style.display = 'block';
         }
+        render();
       } else if(msg.type==='move'){
         applyRemoteMove(msg.move);
       } else if(msg.type==='reset'){

@@ -70,6 +70,11 @@ function createServer(port) {
         relay(room, ws, raw);
       } else if (msg.type === 'chat') {
         relay(room, ws, raw);
+      } else if (msg.type === 'requestSync') {
+        // lets a client re-align itself with the server's authoritative
+        // move history at any time (used for periodic self-healing and
+        // whenever the tab becomes visible/focused again)
+        ws.send(JSON.stringify({ type: 'sync', moves: room.moves }));
       }
     });
 

@@ -777,9 +777,12 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
     document.body.appendChild(back);
   }
 
+  let appliedMoveCount = 0;
+
   function doMove(move){
     state = applyMove(state, move);
     lastMove = move;
+    appliedMoveCount++;
     selected = null; legalForSelected = [];
     logMove(move);
     render();
@@ -789,6 +792,7 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
   function applyRemoteMove(move){
     state = applyMove(state, move);
     lastMove = move;
+    appliedMoveCount++;
     selected = null; legalForSelected = [];
     logMove(move);
     render();
@@ -797,8 +801,11 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
   // Rebuilds the board from scratch by replaying the server's authoritative
   // move history. Used when this client first connects (so a player who
   // joins mid-game starts from the correct position instead of a blank
-  // board) and is safe to call at any time to re-align with the server.
+  // board), and is called periodically + on every reconnect/visibility
+  // change as a self-healing safety net. If we're already caught up this
+  // is a cheap no-op, so it never disrupts an in-progress selection.
   function syncFromHistory(moves){
+    if(moves.length === appliedMoveCount) return;
     state = newGameState();
     lastMove = null;
     selected = null; legalForSelected = [];
@@ -808,6 +815,7 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
       lastMove = move;
       logMove(move);
     }
+    appliedMoveCount = moves.length;
     render();
   }
 
@@ -828,6 +836,7 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
   function resetGame(broadcast){
     state = newGameState();
     selected = null; legalForSelected = []; lastMove = null;
+    appliedMoveCount = 0;
     historyEl.innerHTML = '';
     render();
     if(broadcast) sendMsg({type:'reset'});
@@ -836,6 +845,23 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
   function sendMsg(obj){
     if(ws && ws.readyState===WebSocket.OPEN) ws.send(JSON.stringify(obj));
   }
+
+  function requestSync(){
+    sendMsg({type:'requestSync'});
+  }
+
+  // Belt-and-suspenders self-healing: browsers can silently pause/"sleep"
+  // an inactive tab or window to save power, which can delay delivery of
+  // live WebSocket messages until you interact with it again. Rather than
+  // rely purely on push updates, poll for the authoritative state every
+  // few seconds (cheap — it's a no-op unless we're actually behind) and
+  // also re-sync immediately the moment this window becomes visible/
+  // focused again, so you never need to manually refresh.
+  setInterval(requestSync, 3000);
+  document.addEventListener('visibilitychange', ()=>{
+    if(document.visibilityState === 'visible') requestSync();
+  });
+  window.addEventListener('focus', requestSync);
 
   // --- connection UI ---
   const autoStatusEl = document.getElementById('auto-status');

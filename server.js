@@ -29,6 +29,7 @@ function createServer(port) {
   });
 
   const wss = new WebSocket.Server({ server });
+  wss.on('error', () => {}); // the http `server`'s own 'error' handler below reports this
   const rooms = new Map(); // roomName -> { white, black, spectators: Set }
 
   function getRoom(name) {
@@ -114,6 +115,21 @@ function createServer(port) {
     }
   }
 
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.log(`\n⚠️  Port ${port} is already in use.`);
+      console.log('This usually means an older LAN Chess server is still running');
+      console.log('in another window (maybe from an earlier test).');
+      console.log('\nClose that window (or press Ctrl+C in it), then try again.');
+      console.log('If you\'re not sure where it is, check Task Manager for any');
+      console.log('extra "node.exe" processes and end them.\n');
+      process.exit(1);
+    } else {
+      console.log('Server error:', err.message);
+      process.exit(1);
+    }
+  });
+
   server.listen(port);
 
   return { server, wss, rooms, getRoom };
@@ -134,7 +150,7 @@ if (require.main === module) {
       if (net.family === 'IPv4' && !net.internal) addrs.push(net.address);
     }
   }
-  console.log('\nChess LAN server running.');
+  console.log('\nChess LAN server running. (build 2026-07-31.3)');
   console.log(`  On this computer: http://localhost:${PORT}`);
   addrs.forEach(a => console.log(`  On the same WiFi/network:  http://${a}:${PORT}`));
   console.log('\nGive the second address to the other computer(s) in the shop.\n');

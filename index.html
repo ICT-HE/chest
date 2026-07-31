@@ -345,7 +345,7 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
   // ---------------------------------------------------------------------
   const FILES = ['a','b','c','d','e','f','g','h'];
   const PIECE_GLYPH = {
-    wK:'♔', wQ:'♕', wR:'♖', wB:'♗', wN:'♘', wP:'♙',
+    wK:'♚', wQ:'♛', wR:'♜', wB:'♝', wN:'♞', wP:'♟',
     bK:'♚', bQ:'♛', bR:'♜', bB:'♝', bN:'♞', bP:'♟'
   };
 
@@ -640,6 +640,7 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
   let squareEls = null;     // [r][c] -> DOM element, built once per orientation
   let resignedColor = null; // 'w' | 'b' | null — set once someone resigns
   let awaitingRestartApproval = false; // true once WE'VE asked to restart and are waiting
+  let restartRetryTimer = null;
 
   const boardEl = document.getElementById('board');
   const coordsEl = document.getElementById('coords-file');
@@ -939,6 +940,16 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
   // is a cheap no-op, so it never disrupts an in-progress selection.
   function syncFromHistory(moves){
     if(moves.length === appliedMoveCount) return;
+    // The common case: we're catching up by exactly one move (e.g. the live
+    // push got delayed and this periodic re-sync is what actually delivers
+    // it). Route it through the normal animated move path so it still
+    // slides smoothly instead of snapping into place.
+    if(moves.length === appliedMoveCount + 1 && appliedMoveCount > 0){
+      applyRemoteMove(moves[moves.length - 1]);
+      return;
+    }
+    // Bulk catch-up (first connect, or behind by more than one move) —
+    // snap straight to the final position instead of animating each step.
     state = newGameState();
     lastMove = null;
     selected = null; legalForSelected = [];
@@ -975,6 +986,7 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
     capturedWhite = []; capturedBlack = [];
     resignedColor = null;
     awaitingRestartApproval = false;
+    clearInterval(restartRetryTimer);
     hideRestartBanner();
     historyEl.innerHTML = '';
     render();
@@ -1018,10 +1030,16 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
     if(awaitingRestartApproval) return;
     awaitingRestartApproval = true;
     sendMsg({type:'restartRequest'});
+    clearInterval(restartRetryTimer);
+    restartRetryTimer = setInterval(()=>{
+      if(awaitingRestartApproval) sendMsg({type:'restartRequest'});
+      else clearInterval(restartRetryTimer);
+    }, 2000);
     const otherName = myColor==='w' ? 'Black' : 'White';
     showRestartBanner(`Waiting for ${otherName} to accept your request to start a new game\u2026`, [
       {label:'Cancel', onClick:()=>{
         awaitingRestartApproval = false;
+        clearInterval(restartRetryTimer);
         sendMsg({type:'restartCancel'});
         hideRestartBanner();
       }}
@@ -1107,11 +1125,13 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
         ]);
       } else if(msg.type==='restartAccept'){
         awaitingRestartApproval = false;
+        clearInterval(restartRetryTimer);
         hideRestartBanner();
         // the accepting player also sends an actual 'reset', which arrives
         // right after this and resets the board — nothing else to do here
       } else if(msg.type==='restartDecline'){
         awaitingRestartApproval = false;
+        clearInterval(restartRetryTimer);
         showRestartBanner('Your request to start a new game was declined.', [
           {label:'OK', onClick: hideRestartBanner}
         ]);

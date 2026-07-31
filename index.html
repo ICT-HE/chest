@@ -1,0 +1,981 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LAN Chess</title>
+<style>
+  :root{
+    --bg:#161f1a;
+    --panel:#1f2c25;
+    --panel-line:#2e3f34;
+    --light:#e9ddc4;
+    --dark:#3e6b52;
+    --brass:#c9a24a;
+    --brass-dim:#8f7433;
+    --ivory:#f3ead8;
+    --danger:#c9694a;
+    --text-dim:#9fb0a5;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    background:
+      radial-gradient(1200px 600px at 50% -10%, #223229 0%, var(--bg) 60%);
+    color:var(--ivory);
+    font-family: Georgia, 'Iowan Old Style', 'Palatino Linotype', Palatino, serif;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    min-height:100%;
+    padding:28px 16px 60px;
+  }
+  h1{
+    font-weight:400;
+    letter-spacing:.14em;
+    text-transform:uppercase;
+    font-size:1.5rem;
+    color:var(--brass);
+    margin:0 0 2px;
+  }
+  .subtitle{
+    color:var(--text-dim);
+    font-size:.85rem;
+    letter-spacing:.04em;
+    margin-bottom:22px;
+    font-style:italic;
+  }
+
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--panel-line);
+    border-radius:6px;
+    padding:16px 20px;
+    margin-bottom:18px;
+    width:min(92vw, 480px);
+  }
+  .panel label{
+    display:block;
+    font-size:.72rem;
+    text-transform:uppercase;
+    letter-spacing:.08em;
+    color:var(--text-dim);
+    margin-bottom:6px;
+  }
+  .row{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  input[type=text]{
+    flex:1;
+    min-width:160px;
+    background:#141d18;
+    border:1px solid var(--panel-line);
+    color:var(--ivory);
+    padding:9px 10px;
+    border-radius:4px;
+    font-family: inherit;
+    font-size:.95rem;
+  }
+  button{
+    background:var(--brass);
+    color:#1a1a12;
+    border:none;
+    padding:9px 16px;
+    border-radius:4px;
+    font-family:inherit;
+    font-size:.85rem;
+    letter-spacing:.03em;
+    text-transform:uppercase;
+    cursor:pointer;
+  }
+  button:hover{ background:#ddb75d; }
+  button.secondary{
+    background:transparent;
+    border:1px solid var(--brass-dim);
+    color:var(--brass);
+  }
+  button.secondary:hover{ background:#2a3a30; }
+  button:disabled{ opacity:.4; cursor:not-allowed; }
+
+  #status-line{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    width:min(92vw, 480px);
+    margin-bottom:10px;
+    font-size:.85rem;
+  }
+  .badge{
+    padding:3px 10px 3px 8px;
+    border-radius:20px;
+    font-size:.7rem;
+    letter-spacing:.05em;
+    text-transform:uppercase;
+    border:1px solid var(--panel-line);
+    color:var(--text-dim);
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+  }
+  .badge .dot{ width:9px; height:9px; border-radius:50%; display:inline-block; flex-shrink:0; }
+  .badge .dot.dot-white{ background:#f3ead8; border:1px solid #a89972; }
+  .badge .dot.dot-black{ background:#111815; border:1px solid #55605a; }
+  .badge.on{ color:#c8f0d8; border-color:#3f7a56; background:#1e3527; }
+  .badge.off{ color:#8a988e; border-color:var(--panel-line); background:transparent; opacity:.7; }
+  .badge.turn{
+    border-color:var(--brass);
+    box-shadow:0 0 0 1px var(--brass), 0 0 10px rgba(201,162,74,.45);
+    color:var(--brass);
+  }
+
+  #waiting-banner{
+    width:min(92vw, 480px);
+    text-align:center;
+    background:#2e2412;
+    border:1px solid var(--brass-dim);
+    color:var(--brass);
+    padding:9px 14px;
+    border-radius:6px;
+    font-size:.85rem;
+    letter-spacing:.02em;
+    margin-bottom:12px;
+    animation: pulse 1.8s ease-in-out infinite;
+  }
+  @keyframes pulse{ 0%,100%{ opacity:1; } 50%{ opacity:.55; } }
+
+  #turn-indicator{ color:var(--ivory); }
+  #turn-indicator b{ color:var(--brass); }
+
+  #board-wrap{
+    position:relative;
+  }
+  #board{
+    display:grid;
+    grid-template-columns: repeat(8, min(11vw, 62px));
+    grid-template-rows: repeat(8, min(11vw, 62px));
+    border:3px solid var(--brass-dim);
+    box-shadow:0 10px 40px rgba(0,0,0,.5);
+  }
+  .sq{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:min(8.5vw, 46px);
+    user-select:none;
+    position:relative;
+    cursor:pointer;
+    line-height:1;
+  }
+  .sq.light{ background:var(--light); }
+  .sq.dark{ background:var(--dark); }
+  .sq .pc{ pointer-events:none; }
+  .sq .pc.piece-white{
+    color:#f5ecd8;
+    -webkit-text-stroke: 1.3px #2a2013;
+    text-shadow: -1px -1px 0 #2a2013, 1px -1px 0 #2a2013, -1px 1px 0 #2a2013, 1px 1px 0 #2a2013, 0 2px 3px rgba(0,0,0,.35);
+  }
+  .sq .pc.piece-black{
+    color:#131313;
+    -webkit-text-stroke: 1px #ded2ac;
+    text-shadow: -1px -1px 0 #ded2ac, 1px -1px 0 #ded2ac, -1px 1px 0 #ded2ac, 1px 1px 0 #ded2ac, 0 2px 3px rgba(0,0,0,.35);
+  }
+  .sq.selected{ outline:3px solid var(--brass) inset; }
+  .sq.lastmove{ box-shadow:inset 0 0 0 999px rgba(201,162,74,.28); }
+  .sq .dot{
+    position:absolute;
+    width:22%;
+    height:22%;
+    border-radius:50%;
+    background:rgba(30,20,10,.38);
+  }
+  .sq .ring{
+    position:absolute;
+    width:82%;
+    height:82%;
+    border-radius:50%;
+    border:4px solid rgba(30,20,10,.38);
+  }
+  .sq.check{ box-shadow:inset 0 0 0 999px rgba(201,105,74,.45); }
+
+  #board-wrap.waiting{ opacity:.45; pointer-events:none; }
+
+  #coords-file{
+    display:grid;
+    grid-template-columns: repeat(8, min(11vw, 62px));
+    width:min(88vw, 496px);
+    margin-top:4px;
+  }
+  #coords-file span{ text-align:center; font-size:.7rem; color:var(--text-dim); }
+
+  #meta{
+    width:min(92vw, 480px);
+    display:flex;
+    justify-content:space-between;
+    margin-top:14px;
+    font-size:.85rem;
+    color:var(--text-dim);
+  }
+
+  #history{
+    width:min(92vw, 480px);
+    max-height:110px;
+    overflow-y:auto;
+    background:var(--panel);
+    border:1px solid var(--panel-line);
+    border-radius:6px;
+    padding:10px 14px;
+    margin-top:12px;
+    font-size:.85rem;
+    line-height:1.6;
+    color:var(--text-dim);
+  }
+
+  .modal-back{
+    position:fixed; inset:0; background:rgba(10,14,11,.7);
+    display:flex; align-items:center; justify-content:center;
+    z-index:20;
+  }
+  .modal{
+    background:var(--panel); border:1px solid var(--brass-dim);
+    border-radius:8px; padding:22px 26px; text-align:center;
+  }
+  .modal h2{ color:var(--brass); font-weight:400; margin-top:0; }
+  .promo-row{ display:flex; gap:10px; justify-content:center; margin-top:14px; }
+  .promo-row button{ font-size:1.6rem; padding:8px 14px; }
+
+  footer{
+    margin-top:26px; color:#5c6a61; font-size:.72rem; text-align:center; max-width:480px;
+  }
+</style>
+</head>
+<body>
+
+<h1>LAN Chess</h1>
+<div class="subtitle">Two boards, one wire &mdash; play across the same network</div>
+
+<div class="panel" id="connect-panel">
+  <div id="auto-status" style="text-align:center; color:var(--text-dim); font-size:.9rem;">Connecting&hellip;</div>
+  <details id="manual-fallback" style="display:none; margin-top:10px;">
+    <summary style="cursor:pointer; color:var(--brass); font-size:.8rem;">Trouble connecting? Enter the address manually</summary>
+    <div class="row" style="margin-top:10px;">
+      <input type="text" id="server-addr" placeholder="e.g. 192.168.1.42:3000">
+      <input type="text" id="room-name" placeholder="room (optional)" style="max-width:120px">
+      <button id="connect-btn">Connect</button>
+    </div>
+  </details>
+</div>
+
+<div class="panel" id="share-panel" style="display:none;">
+  <label>Share this address so the other player can join &mdash; they just open it in a browser</label>
+  <div class="row">
+    <input type="text" id="share-link" readonly>
+    <button class="secondary" id="copy-link-btn">Copy</button>
+  </div>
+</div>
+
+<div id="waiting-banner" style="display:none;"></div>
+
+<div id="status-line" style="display:none;">
+  <div id="turn-indicator">You are <b id="my-color">--</b></div>
+  <div class="row" style="gap:8px;">
+    <span class="badge off" id="badge-white"><span class="dot dot-white"></span>White</span>
+    <span class="badge off" id="badge-black"><span class="dot dot-black"></span>Black</span>
+  </div>
+</div>
+
+<div id="board-wrap" style="display:none;">
+  <div id="board"></div>
+  <div id="coords-file"></div>
+</div>
+
+<div id="meta" style="display:none;">
+  <span id="game-status">In progress</span>
+  <button class="secondary" id="reset-btn">New Game</button>
+</div>
+
+<div id="history" style="display:none;"></div>
+
+<footer>
+Run <code>node server.js</code> on any one computer in the shop, then have every player open this page and connect to that computer's LAN address. No internet required.
+<br><span style="opacity:.5;">build 2026-07-31.3</span>
+</footer>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---------------------------------------------------------------------
+  // Chess engine
+  // ---------------------------------------------------------------------
+  const FILES = ['a','b','c','d','e','f','g','h'];
+  const PIECE_GLYPH = {
+    wK:'♔', wQ:'♕', wR:'♖', wB:'♗', wN:'♘', wP:'♙',
+    bK:'♚', bQ:'♛', bR:'♜', bB:'♝', bN:'♞', bP:'♟'
+  };
+
+  function initBoard(){
+    const b = Array.from({length:8}, ()=>Array(8).fill(null));
+    const back = ['R','N','B','Q','K','B','N','R'];
+    for(let c=0;c<8;c++){
+      b[0][c] = {type:back[c], color:'b'};
+      b[1][c] = {type:'P', color:'b'};
+      b[6][c] = {type:'P', color:'w'};
+      b[7][c] = {type:back[c], color:'w'};
+    }
+    return b;
+  }
+
+  function newGameState(){
+    return {
+      board: initBoard(),
+      turn: 'w',
+      castling: {wK:true, wQ:true, bK:true, bQ:true},
+      ep: null, // {r,c} square a pawn can capture en passant onto
+      halfmove: 0,
+      fullmove: 1
+    };
+  }
+
+  function inBounds(r,c){ return r>=0 && r<8 && c>=0 && c<8; }
+  function cloneState(s){
+    return {
+      board: s.board.map(row=>row.map(p=> p? {type:p.type,color:p.color} : null)),
+      turn: s.turn,
+      castling: {...s.castling},
+      ep: s.ep ? {...s.ep} : null,
+      halfmove: s.halfmove,
+      fullmove: s.fullmove
+    };
+  }
+
+  const DIRS = {
+    B: [[-1,-1],[-1,1],[1,-1],[1,1]],
+    R: [[-1,0],[1,0],[0,-1],[0,1]],
+    Q: [[-1,-1],[-1,1],[1,-1],[1,1],[-1,0],[1,0],[0,-1],[0,1]],
+    N: [[-2,-1],[-2,1],[2,-1],[2,1],[-1,-2],[-1,2],[1,-2],[1,2]],
+    K: [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]]
+  };
+
+  // squares attacked by `color`, used for check detection (ignores pins / legality)
+  function isSquareAttacked(state, r, c, byColor){
+    const b = state.board;
+    // pawns
+    const dir = byColor==='w' ? 1 : -1; // attacking pawn sits `dir` rows below/above target
+    for(const dc of [-1,1]){
+      const pr = r+dir, pc = c+dc;
+      if(inBounds(pr,pc)){
+        const p = b[pr][pc];
+        if(p && p.color===byColor && p.type==='P') return true;
+      }
+    }
+    // knights
+    for(const [dr,dc] of DIRS.N){
+      const pr=r+dr, pc=c+dc;
+      if(inBounds(pr,pc)){
+        const p = b[pr][pc];
+        if(p && p.color===byColor && p.type==='N') return true;
+      }
+    }
+    // king
+    for(const [dr,dc] of DIRS.K){
+      const pr=r+dr, pc=c+dc;
+      if(inBounds(pr,pc)){
+        const p = b[pr][pc];
+        if(p && p.color===byColor && p.type==='K') return true;
+      }
+    }
+    // sliding: bishop/queen diagonals
+    for(const [dr,dc] of DIRS.B){
+      let pr=r+dr, pc=c+dc;
+      while(inBounds(pr,pc)){
+        const p = b[pr][pc];
+        if(p){
+          if(p.color===byColor && (p.type==='B'||p.type==='Q')) return true;
+          break;
+        }
+        pr+=dr; pc+=dc;
+      }
+    }
+    // sliding: rook/queen orthogonals
+    for(const [dr,dc] of DIRS.R){
+      let pr=r+dr, pc=c+dc;
+      while(inBounds(pr,pc)){
+        const p = b[pr][pc];
+        if(p){
+          if(p.color===byColor && (p.type==='R'||p.type==='Q')) return true;
+          break;
+        }
+        pr+=dr; pc+=dc;
+      }
+    }
+    return false;
+  }
+
+  function findKing(state, color){
+    for(let r=0;r<8;r++) for(let c=0;c<8;c++){
+      const p = state.board[r][c];
+      if(p && p.color===color && p.type==='K') return {r,c};
+    }
+    return null;
+  }
+
+  function inCheck(state, color){
+    const k = findKing(state, color);
+    if(!k) return false;
+    return isSquareAttacked(state, k.r, k.c, color==='w'?'b':'w');
+  }
+
+  // pseudo-legal moves for the piece at r,c (does not filter for leaving own king in check)
+  function pseudoMoves(state, r, c){
+    const b = state.board;
+    const p = b[r][c];
+    if(!p) return [];
+    const moves = [];
+    const opp = p.color==='w'?'b':'w';
+
+    function addIfOk(tr,tc, extra){
+      if(!inBounds(tr,tc)) return;
+      const target = b[tr][tc];
+      if(target && target.color===p.color) return;
+      moves.push(Object.assign({from:{r,c}, to:{r:tr,c:tc}, capture: !!target}, extra||{}));
+    }
+
+    if(p.type==='N' || p.type==='K'){
+      for(const [dr,dc] of DIRS[p.type]) addIfOk(r+dr, c+dc);
+      if(p.type==='K'){
+        // castling
+        const home = p.color==='w' ? 7 : 0;
+        if(r===home && c===4){
+          const rights = state.castling;
+          const canK = p.color==='w' ? rights.wK : rights.bK;
+          const canQ = p.color==='w' ? rights.wQ : rights.bQ;
+          if(canK && !b[home][5] && !b[home][6] &&
+             !isSquareAttacked(state, home, 4, opp) &&
+             !isSquareAttacked(state, home, 5, opp) &&
+             !isSquareAttacked(state, home, 6, opp)){
+            moves.push({from:{r,c}, to:{r:home,c:6}, capture:false, castle:'K'});
+          }
+          if(canQ && !b[home][1] && !b[home][2] && !b[home][3] &&
+             !isSquareAttacked(state, home, 4, opp) &&
+             !isSquareAttacked(state, home, 3, opp) &&
+             !isSquareAttacked(state, home, 2, opp)){
+            moves.push({from:{r,c}, to:{r:home,c:2}, capture:false, castle:'Q'});
+          }
+        }
+      }
+    } else if(p.type==='B' || p.type==='R' || p.type==='Q'){
+      for(const [dr,dc] of DIRS[p.type]){
+        let tr=r+dr, tc=c+dc;
+        while(inBounds(tr,tc)){
+          const target = b[tr][tc];
+          if(target){
+            if(target.color!==p.color) moves.push({from:{r,c}, to:{r:tr,c:tc}, capture:true});
+            break;
+          }
+          moves.push({from:{r,c}, to:{r:tr,c:tc}, capture:false});
+          tr+=dr; tc+=dc;
+        }
+      }
+    } else if(p.type==='P'){
+      const dir = p.color==='w' ? -1 : 1;
+      const startRow = p.color==='w' ? 6 : 1;
+      const lastRow = p.color==='w' ? 0 : 7;
+      // forward
+      if(inBounds(r+dir,c) && !b[r+dir][c]){
+        pushPawn(r+dir, c, false);
+        if(r===startRow && !b[r+2*dir][c]){
+          moves.push({from:{r,c}, to:{r:r+2*dir,c}, capture:false, double:true});
+        }
+      }
+      // captures
+      for(const dc of [-1,1]){
+        const tr=r+dir, tc=c+dc;
+        if(!inBounds(tr,tc)) continue;
+        const target = b[tr][tc];
+        if(target && target.color===opp){
+          pushPawn(tr, tc, true);
+        } else if(state.ep && state.ep.r===tr && state.ep.c===tc){
+          moves.push({from:{r,c}, to:{r:tr,c:tc}, capture:true, enpassant:true});
+        }
+      }
+      function pushPawn(tr,tc,capture){
+        if(tr===lastRow){
+          for(const promo of ['Q','R','B','N']){
+            moves.push({from:{r,c}, to:{r:tr,c:tc}, capture, promotion:promo});
+          }
+        } else {
+          moves.push({from:{r,c}, to:{r:tr,c:tc}, capture});
+        }
+      }
+    }
+    return moves;
+  }
+
+  function applyMove(state, move){
+    const s = cloneState(state);
+    const b = s.board;
+    const p = b[move.from.r][move.from.c];
+    const movingColor = p.color;
+
+    // en passant capture removes the pawn behind the destination
+    if(move.enpassant){
+      const capRow = movingColor==='w' ? move.to.r+1 : move.to.r-1;
+      b[capRow][move.to.c] = null;
+    }
+
+    b[move.to.r][move.to.c] = {type: move.promotion || p.type, color: movingColor};
+    b[move.from.r][move.from.c] = null;
+
+    // castling: move the rook too
+    if(move.castle){
+      const home = move.from.r;
+      if(move.castle==='K'){ b[home][5] = b[home][7]; b[home][7] = null; }
+      else { b[home][3] = b[home][0]; b[home][0] = null; }
+    }
+
+    // update castling rights
+    if(p.type==='K'){
+      if(movingColor==='w'){ s.castling.wK=false; s.castling.wQ=false; }
+      else { s.castling.bK=false; s.castling.bQ=false; }
+    }
+    function killRookRight(r,c){
+      if(r===7&&c===0) s.castling.wQ=false;
+      if(r===7&&c===7) s.castling.wK=false;
+      if(r===0&&c===0) s.castling.bQ=false;
+      if(r===0&&c===7) s.castling.bK=false;
+    }
+    killRookRight(move.from.r, move.from.c);
+    killRookRight(move.to.r, move.to.c);
+
+    // en passant target for next move
+    s.ep = move.double ? {r:(move.from.r+move.to.r)/2, c:move.from.c} : null;
+
+    s.halfmove = (move.capture || p.type==='P') ? 0 : s.halfmove+1;
+    if(movingColor==='b') s.fullmove++;
+    s.turn = movingColor==='w' ? 'b' : 'w';
+    return s;
+  }
+
+  function legalMovesFrom(state, r, c){
+    const p = state.board[r][c];
+    if(!p) return [];
+    const pseudo = pseudoMoves(state, r, c);
+    return pseudo.filter(m=>{
+      const next = applyMove(state, m);
+      return !inCheck(next, p.color);
+    });
+  }
+
+  function allLegalMoves(state, color){
+    const out = [];
+    for(let r=0;r<8;r++) for(let c=0;c<8;c++){
+      const p = state.board[r][c];
+      if(p && p.color===color) out.push(...legalMovesFrom(state, r, c));
+    }
+    return out;
+  }
+
+  function gameStatus(state){
+    const moves = allLegalMoves(state, state.turn);
+    const check = inCheck(state, state.turn);
+    if(moves.length===0){
+      return check ? {kind:'checkmate', winner: state.turn==='w'?'b':'w'} : {kind:'stalemate'};
+    }
+    if(state.halfmove>=100) return {kind:'draw', reason:'50-move rule'};
+    return {kind: check?'check':'ongoing'};
+  }
+
+  function squareName(r,c){ return FILES[c] + (8-r); }
+
+  // ---------------------------------------------------------------------
+  // UI + networking
+  // ---------------------------------------------------------------------
+  let state = newGameState();
+  let myColor = null;       // 'w' | 'b' | 'spectator'
+  let selected = null;      // {r,c}
+  let legalForSelected = [];
+  let lastMove = null;
+  let ws = null;
+  let pendingPromotion = null;
+  let bothConnected = false;
+  let whiteConnected = false;
+  let blackConnected = false;
+  let flip = false;         // true = show the board from Black's side (rank 8 at the bottom)
+  let squareEls = null;     // [r][c] -> DOM element, built once per orientation
+
+  const boardEl = document.getElementById('board');
+  const coordsEl = document.getElementById('coords-file');
+  const statusLine = document.getElementById('status-line');
+  const waitingBanner = document.getElementById('waiting-banner');
+  const boardWrap = document.getElementById('board-wrap');
+  const metaEl = document.getElementById('meta');
+  const historyEl = document.getElementById('history');
+  const myColorEl = document.getElementById('my-color');
+  const gameStatusEl = document.getElementById('game-status');
+  const badgeWhite = document.getElementById('badge-white');
+  const badgeBlack = document.getElementById('badge-black');
+
+  function updateCoordLabels(){
+    coordsEl.innerHTML = '';
+    const order = flip ? [...FILES].reverse() : FILES;
+    order.forEach(f=>{
+      const s = document.createElement('span');
+      s.textContent = f;
+      coordsEl.appendChild(s);
+    });
+  }
+  updateCoordLabels();
+
+  // Builds the 64 square elements once (in the correct visual order for the
+  // current orientation) and wires up their click handlers. After this,
+  // render() only ever updates the *content* of these existing elements —
+  // it never tears down and rebuilds the grid, so moves update instantly
+  // without any full-page flicker or "refresh" feeling.
+  function buildBoard(){
+    boardEl.innerHTML = '';
+    squareEls = Array.from({length:8}, ()=>Array(8).fill(null));
+    for(let vr=0; vr<8; vr++){
+      for(let vc=0; vc<8; vc++){
+        const r = flip ? 7-vr : vr;
+        const c = flip ? 7-vc : vc;
+        const sq = document.createElement('div');
+        sq.className = 'sq ' + (((r+c)%2===0) ? 'light':'dark');
+        sq.dataset.r = r; sq.dataset.c = c;
+        sq.addEventListener('click', ()=>onSquareClick(r,c));
+        boardEl.appendChild(sq);
+        squareEls[r][c] = sq;
+      }
+    }
+  }
+  buildBoard();
+
+  function setOrientation(color){
+    flip = (color === 'b');
+    buildBoard();
+    updateCoordLabels();
+  }
+
+  function render(){
+    if(!squareEls) buildBoard();
+    const status = gameStatus(state);
+    const kingPos = status.kind==='check' || status.kind==='checkmate' ? findKing(state, state.turn) : null;
+
+    for(let r=0;r<8;r++){
+      for(let c=0;c<8;c++){
+        const sq = squareEls[r][c];
+        sq.classList.remove('lastmove','selected','check');
+        sq.innerHTML = '';
+
+        if(lastMove && ((lastMove.from.r===r&&lastMove.from.c===c)||(lastMove.to.r===r&&lastMove.to.c===c))){
+          sq.classList.add('lastmove');
+        }
+        if(selected && selected.r===r && selected.c===c) sq.classList.add('selected');
+        if(kingPos && kingPos.r===r && kingPos.c===c) sq.classList.add('check');
+
+        const p = state.board[r][c];
+        if(p){
+          const span = document.createElement('span');
+          span.className = 'pc ' + (p.color==='w' ? 'piece-white' : 'piece-black');
+          // append U+FE0E so browsers render these as plain colorable glyphs
+          // instead of pre-colored emoji, which is what washes out the color
+          span.textContent = PIECE_GLYPH[p.color+p.type] + '\uFE0E';
+          sq.appendChild(span);
+        }
+
+        const isTarget = legalForSelected.find(m=>m.to.r===r && m.to.c===c);
+        if(isTarget){
+          const marker = document.createElement('div');
+          marker.className = isTarget.capture ? 'ring' : 'dot';
+          sq.appendChild(marker);
+        }
+      }
+    }
+
+    myColorEl.textContent = myColor==='w' ? 'White' : myColor==='b' ? 'Black' : 'a spectator';
+
+    let statusText;
+    const turnName = state.turn==='w' ? 'White' : 'Black';
+    if(status.kind==='checkmate') statusText = `Checkmate — ${status.winner==='w'?'White':'Black'} wins`;
+    else if(status.kind==='stalemate') statusText = 'Stalemate — draw';
+    else if(status.kind==='draw') statusText = `Draw (${status.reason})`;
+    else if(status.kind==='check') statusText = `${turnName} to move — in check`;
+    else statusText = `${turnName} to move`;
+    gameStatusEl.textContent = statusText;
+
+    // highlight whichever badge belongs to the side that's actually to move
+    const whiteTurn = bothConnected && state.turn==='w';
+    const blackTurn = bothConnected && state.turn==='b';
+    badgeWhite.innerHTML = '<span class="dot dot-white"></span>White' + (whiteConnected?' ●':'');
+    badgeWhite.className = 'badge ' + (whiteConnected?'on':'off') + (whiteTurn?' turn':'');
+    badgeBlack.innerHTML = '<span class="dot dot-black"></span>Black' + (blackConnected?' ●':'');
+    badgeBlack.className = 'badge ' + (blackConnected?'on':'off') + (blackTurn?' turn':'');
+  }
+
+  function onSquareClick(r,c){
+    if(pendingPromotion) return;
+    if(!bothConnected) return; // wait until both White and Black have joined
+    if(myColor!=='w' && myColor!=='b') return; // spectators can't move
+    if(state.turn!==myColor) return;
+
+    const status = gameStatus(state);
+    if(status.kind==='checkmate' || status.kind==='stalemate' || status.kind==='draw') return;
+
+    const p = state.board[r][c];
+
+    if(selected){
+      const move = legalForSelected.find(m=>m.to.r===r && m.to.c===c);
+      if(move){
+        if(move.promotion && move.promotion!=='Q'){
+          // only offer promotion picker once (dedupe the 4 promo entries)
+        }
+        const promoMoves = legalForSelected.filter(m=>m.to.r===r && m.to.c===c && m.promotion);
+        if(promoMoves.length>0){
+          askPromotion(promoMoves, mv=>doMove(mv));
+        } else {
+          doMove(move);
+        }
+        return;
+      }
+      // clicking own another piece re-selects
+      if(p && p.color===myColor){
+        selectSquare(r,c);
+      } else {
+        selected = null; legalForSelected = []; render();
+      }
+    } else if(p && p.color===myColor){
+      selectSquare(r,c);
+    }
+  }
+
+  function selectSquare(r,c){
+    selected = {r,c};
+    legalForSelected = legalMovesFrom(state, r, c);
+    render();
+  }
+
+  function askPromotion(promoMoves, cb){
+    pendingPromotion = true;
+    const back = document.createElement('div');
+    back.className = 'modal-back';
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.innerHTML = '<h2>Promote pawn to&hellip;</h2>';
+    const row = document.createElement('div');
+    row.className = 'promo-row';
+    const labels = {Q:'♛',R:'♜',B:'♝',N:'♞'};
+    promoMoves.forEach(m=>{
+      const btn = document.createElement('button');
+      btn.textContent = labels[m.promotion];
+      btn.addEventListener('click', ()=>{
+        document.body.removeChild(back);
+        pendingPromotion = false;
+        cb(m);
+      });
+      row.appendChild(btn);
+    });
+    modal.appendChild(row);
+    back.appendChild(modal);
+    document.body.appendChild(back);
+  }
+
+  let appliedMoveCount = 0;
+
+  function doMove(move){
+    state = applyMove(state, move);
+    lastMove = move;
+    appliedMoveCount++;
+    selected = null; legalForSelected = [];
+    logMove(move);
+    render();
+    sendMsg({type:'move', move});
+  }
+
+  function applyRemoteMove(move){
+    state = applyMove(state, move);
+    lastMove = move;
+    appliedMoveCount++;
+    selected = null; legalForSelected = [];
+    logMove(move);
+    render();
+  }
+
+  // Rebuilds the board from scratch by replaying the server's authoritative
+  // move history. Used when this client first connects (so a player who
+  // joins mid-game starts from the correct position instead of a blank
+  // board), and is called periodically + on every reconnect/visibility
+  // change as a self-healing safety net. If we're already caught up this
+  // is a cheap no-op, so it never disrupts an in-progress selection.
+  function syncFromHistory(moves){
+    if(moves.length === appliedMoveCount) return;
+    state = newGameState();
+    lastMove = null;
+    selected = null; legalForSelected = [];
+    historyEl.innerHTML = '';
+    for(const move of moves){
+      state = applyMove(state, move);
+      lastMove = move;
+      logMove(move);
+    }
+    appliedMoveCount = moves.length;
+    render();
+  }
+
+  function logMove(move){
+    const from = squareName(move.from.r, move.from.c);
+    const to = squareName(move.to.r, move.to.c);
+    const entry = document.createElement('div');
+    let txt = `${from}–${to}`;
+    if(move.castle==='K') txt = 'O-O';
+    if(move.castle==='Q') txt = 'O-O-O';
+    if(move.promotion) txt += '=' + move.promotion;
+    if(move.capture) txt += ' ×';
+    entry.textContent = txt;
+    historyEl.appendChild(entry);
+    historyEl.scrollTop = historyEl.scrollHeight;
+  }
+
+  function resetGame(broadcast){
+    state = newGameState();
+    selected = null; legalForSelected = []; lastMove = null;
+    appliedMoveCount = 0;
+    historyEl.innerHTML = '';
+    render();
+    if(broadcast) sendMsg({type:'reset'});
+  }
+
+  function sendMsg(obj){
+    if(ws && ws.readyState===WebSocket.OPEN) ws.send(JSON.stringify(obj));
+  }
+
+  function requestSync(){
+    sendMsg({type:'requestSync'});
+  }
+
+  // Belt-and-suspenders self-healing: browsers can silently pause/"sleep"
+  // an inactive tab or window to save power, which can delay delivery of
+  // live WebSocket messages until you interact with it again. Rather than
+  // rely purely on push updates, poll for the authoritative state every
+  // few seconds (cheap — it's a no-op unless we're actually behind) and
+  // also re-sync immediately the moment this window becomes visible/
+  // focused again, so you never need to manually refresh.
+  setInterval(requestSync, 3000);
+  document.addEventListener('visibilitychange', ()=>{
+    if(document.visibilityState === 'visible') requestSync();
+  });
+  window.addEventListener('focus', requestSync);
+
+  // --- connection UI ---
+  const autoStatusEl = document.getElementById('auto-status');
+  const manualFallback = document.getElementById('manual-fallback');
+  const sharePanel = document.getElementById('share-panel');
+  const shareLinkInput = document.getElementById('share-link');
+
+  document.getElementById('connect-btn').addEventListener('click', ()=>{
+    const addr = document.getElementById('server-addr').value.trim();
+    const room = document.getElementById('room-name').value.trim() || 'lobby';
+    if(addr) connect(addr, room);
+  });
+  document.getElementById('reset-btn').addEventListener('click', ()=>resetGame(true));
+  document.getElementById('server-addr').addEventListener('keydown', e=>{
+    if(e.key==='Enter') document.getElementById('connect-btn').click();
+  });
+  document.getElementById('copy-link-btn').addEventListener('click', ()=>{
+    shareLinkInput.select();
+    navigator.clipboard && navigator.clipboard.writeText(shareLinkInput.value).catch(()=>{});
+    document.execCommand && document.execCommand('copy');
+  });
+
+  let reconnectAttempt = 0;
+  let reconnectTimer = null;
+  let intentionalClose = false;
+
+  function connect(addr, room){
+    const url = `ws://${addr}?room=${encodeURIComponent(room)}`;
+    try{
+      ws = new WebSocket(url);
+    }catch(e){
+      showManualFallback('Could not connect: ' + e.message);
+      return;
+    }
+
+    ws.addEventListener('open', ()=>{
+      reconnectAttempt = 0;
+      document.getElementById('connect-panel').style.display = 'none';
+      statusLine.style.display = 'flex';
+      boardWrap.style.display = 'block';
+      metaEl.style.display = 'flex';
+      historyEl.style.display = 'block';
+      sharePanel.style.display = 'block';
+      shareLinkInput.value = location.origin + location.pathname + (room!=='lobby' ? ('?room='+encodeURIComponent(room)) : '');
+      render();
+    });
+
+    ws.addEventListener('message', (ev)=>{
+      let msg;
+      try{ msg = JSON.parse(ev.data); } catch { return; }
+      if(msg.type==='assign'){
+        myColor = msg.color==='white'?'w':msg.color==='black'?'b':'spectator';
+        setOrientation(myColor);
+        render();
+      } else if(msg.type==='sync'){
+        syncFromHistory(msg.moves);
+      } else if(msg.type==='presence'){
+        whiteConnected = !!msg.white;
+        blackConnected = !!msg.black;
+        bothConnected = whiteConnected && blackConnected;
+        boardWrap.classList.toggle('waiting', !bothConnected);
+        if(bothConnected){
+          sharePanel.style.display = 'none';
+          waitingBanner.style.display = 'none';
+        } else {
+          const missing = !whiteConnected ? 'White' : 'Black';
+          waitingBanner.textContent = `Waiting for ${missing} to join\u2026`;
+          waitingBanner.style.display = 'block';
+        }
+        render();
+      } else if(msg.type==='move'){
+        applyRemoteMove(msg.move);
+      } else if(msg.type==='reset'){
+        resetGame(false);
+      }
+    });
+
+    ws.addEventListener('close', ()=>{
+      if(intentionalClose) return;
+      gameStatusEl.textContent = 'Reconnecting\u2026';
+      boardWrap.classList.add('waiting');
+      reconnectAttempt++;
+      const delay = Math.min(1000 * reconnectAttempt, 5000);
+      clearTimeout(reconnectTimer);
+      reconnectTimer = setTimeout(()=> connect(addr, room), delay);
+    });
+    ws.addEventListener('error', ()=>{
+      if(reconnectAttempt === 0){
+        showManualFallback('Could not reach a chess server at ' + addr + '. Check the address and that the server is running.');
+      }
+    });
+  }
+
+  function showManualFallback(message){
+    autoStatusEl.textContent = message;
+    manualFallback.style.display = 'block';
+    manualFallback.open = true;
+    const addrInput = document.getElementById('server-addr');
+    if(!addrInput.value) addrInput.value = location.host;
+  }
+
+  // --- auto-connect using the address this page was loaded from ---
+  (function autoConnect(){
+    const params = new URLSearchParams(location.search);
+    const room = params.get('room') || 'lobby';
+    if(location.protocol === 'file:' || !location.host){
+      showManualFallback('Enter the server address to connect.');
+      return;
+    }
+    connect(location.host, room);
+  })();
+
+  render();
+})();
+</script>
+</body>
+</html>

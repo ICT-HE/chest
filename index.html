@@ -395,7 +395,7 @@
 
 <footer>
 Run <code>node server.js</code> on any one computer in the shop, then have every player open this page and connect to that computer's LAN address. No internet required.
-<br><span style="opacity:.5;">build 2026-08-01.9</span>
+<br><span style="opacity:.5;">build 2026-08-01.10</span>
 </footer>
 
 <script>
@@ -691,8 +691,7 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
   let restartRetryTimer = null;
   let gameEnded = false;
   let gameResult = null;
-  let awaitingRematch = false;
-  let rematchAccepted = false;
+  let waitingForRematch = false;
 
   const boardEl = document.getElementById('board');
   const coordsEl = document.getElementById('coords-file');
@@ -809,6 +808,12 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
   function showRematchWaiting(){
     rematchWaitingBanner.classList.add('show');
     gameOverOverlay.classList.remove('show');
+    waitingForRematch = true;
+  }
+
+  function hideRematchWaiting(){
+    rematchWaitingBanner.classList.remove('show');
+    waitingForRematch = false;
   }
 
   function render(){
@@ -1064,12 +1069,11 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
     gameEnded = false;
     gameResult = null;
     awaitingRestartApproval = false;
-    awaitingRematch = false;
-    rematchAccepted = false;
+    waitingForRematch = false;
     clearInterval(restartRetryTimer);
     hideRestartBanner();
     if(!keepOverlay) hideGameOver();
-    rematchWaitingBanner.classList.remove('show');
+    hideRematchWaiting();
     historyEl.innerHTML = '';
     render();
     if(broadcast) sendMsg({type:'reset'});
@@ -1277,7 +1281,9 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
           break;
           
         case 'rematchRequest':
-          // Opponent wants a rematch
+          // Opponent wants a rematch - show accept/decline buttons
+          // Hide any waiting banner on this screen
+          hideRematchWaiting();
           showRestartBanner('Your opponent wants a rematch!', [
             {label:'Accept', onClick:()=>{ 
               sendMsg({type:'rematchAccept'}); 
@@ -1293,7 +1299,6 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
           
         case 'rematchAccept':
           // Opponent accepted the rematch
-          rematchAccepted = true;
           hideRestartBanner();
           resetGame(true);
           break;
@@ -1302,10 +1307,16 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
           // Opponent declined the rematch
           hideRestartBanner();
           showRestartBanner('Your opponent declined the rematch.', [
-            {label:'OK', onClick: hideRestartBanner}
+            {label:'OK', onClick: ()=>{
+              hideRestartBanner();
+              // Show the game over overlay again
+              if(gameResult){
+                showGameOver(gameResult.winner, gameResult.reason);
+              }
+            }}
           ]);
           // Remove the waiting banner if it was showing
-          rematchWaitingBanner.classList.remove('show');
+          hideRematchWaiting();
           break;
       }
     });

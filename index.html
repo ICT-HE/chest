@@ -16,7 +16,6 @@
     --ivory:#f3ead8;
     --danger:#c9694a;
     --text-dim:#9fb0a5;
-    --gold:#f0d080;
   }
   *{box-sizing:border-box;}
   html,body{height:100%;}
@@ -87,7 +86,6 @@
     letter-spacing:.03em;
     text-transform:uppercase;
     cursor:pointer;
-    transition:background 0.15s;
   }
   button:hover{ background:#ddb75d; }
   button.secondary{
@@ -271,57 +269,6 @@
   .promo-row{ display:flex; gap:10px; justify-content:center; margin-top:14px; }
   .promo-row button{ font-size:1.6rem; padding:8px 14px; }
 
-  #game-over-overlay{
-    position:absolute;
-    inset:0;
-    background:rgba(10,14,11,.85);
-    display:none;
-    align-items:center;
-    justify-content:center;
-    flex-direction:column;
-    z-index:10;
-    border-radius:2px;
-  }
-  #game-over-overlay.show{ display:flex; }
-  #game-over-overlay .result{
-    font-size:1.4rem;
-    color:var(--gold);
-    margin-bottom:4px;
-    letter-spacing:.04em;
-  }
-  #game-over-overlay .sub{
-    font-size:.9rem;
-    color:var(--text-dim);
-    margin-bottom:16px;
-  }
-  #game-over-overlay button{
-    font-size:.8rem;
-    padding:8px 24px;
-  }
-
-  #rematch-waiting-banner{
-    position:absolute;
-    inset:0;
-    background:rgba(10,14,11,.85);
-    display:none;
-    align-items:center;
-    justify-content:center;
-    flex-direction:column;
-    z-index:10;
-    border-radius:2px;
-  }
-  #rematch-waiting-banner.show{ display:flex; }
-  #rematch-waiting-banner .text{
-    font-size:1.2rem;
-    color:var(--gold);
-    margin-bottom:4px;
-    letter-spacing:.04em;
-  }
-  #rematch-waiting-banner .sub{
-    font-size:.9rem;
-    color:var(--text-dim);
-  }
-
   footer{
     margin-top:26px; color:#5c6a61; font-size:.72rem; text-align:center; max-width:480px;
   }
@@ -367,17 +314,8 @@
   <div class="captured-row"><span class="captured-label">Black has taken</span><span id="captured-by-black" class="captured-pieces"></span></div>
 </div>
 
-<div id="board-wrap" style="display:none; position:relative;">
+<div id="board-wrap" style="display:none;">
   <div id="board"></div>
-  <div id="game-over-overlay">
-    <div class="result" id="result-text">You win!</div>
-    <div class="sub" id="result-sub">Checkmate</div>
-    <button id="next-match-btn">Next Match</button>
-  </div>
-  <div id="rematch-waiting-banner">
-    <div class="text">Waiting for opponent...</div>
-    <div class="sub">They need to accept the rematch</div>
-  </div>
   <div id="coords-file"></div>
 </div>
 
@@ -395,7 +333,7 @@
 
 <footer>
 Run <code>node server.js</code> on any one computer in the shop, then have every player open this page and connect to that computer's LAN address. No internet required.
-<br><span style="opacity:.5;">build 2026-08-01.8</span>
+<br><span style="opacity:.5;">build 2026-07-31.3</span>
 </footer>
 
 <script>
@@ -403,12 +341,12 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
   "use strict";
 
   // ---------------------------------------------------------------------
-  // Chess engine (full implementation)
+  // Chess engine
   // ---------------------------------------------------------------------
   const FILES = ['a','b','c','d','e','f','g','h'];
   const PIECE_GLYPH = {
     wK:'♚', wQ:'♛', wR:'♜', wB:'♝', wN:'♞', wP:'♟',
-    bK:'♚', bQ:'♛', bR:'♜', wB:'♝', wN:'♞', wP:'♟'
+    bK:'♚', bQ:'♛', bR:'♜', bB:'♝', bN:'♞', bP:'♟'
   };
 
   function initBoard(){
@@ -428,7 +366,7 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
       board: initBoard(),
       turn: 'w',
       castling: {wK:true, wQ:true, bK:true, bQ:true},
-      ep: null,
+      ep: null, // {r,c} square a pawn can capture en passant onto
       halfmove: 0,
       fullmove: 1
     };
@@ -454,9 +392,11 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
     K: [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]]
   };
 
+  // squares attacked by `color`, used for check detection (ignores pins / legality)
   function isSquareAttacked(state, r, c, byColor){
     const b = state.board;
-    const dir = byColor==='w' ? 1 : -1;
+    // pawns
+    const dir = byColor==='w' ? 1 : -1; // attacking pawn sits `dir` rows below/above target
     for(const dc of [-1,1]){
       const pr = r+dir, pc = c+dc;
       if(inBounds(pr,pc)){
@@ -464,6 +404,7 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
         if(p && p.color===byColor && p.type==='P') return true;
       }
     }
+    // knights
     for(const [dr,dc] of DIRS.N){
       const pr=r+dr, pc=c+dc;
       if(inBounds(pr,pc)){
@@ -471,6 +412,7 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
         if(p && p.color===byColor && p.type==='N') return true;
       }
     }
+    // king
     for(const [dr,dc] of DIRS.K){
       const pr=r+dr, pc=c+dc;
       if(inBounds(pr,pc)){
@@ -478,6 +420,7 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
         if(p && p.color===byColor && p.type==='K') return true;
       }
     }
+    // sliding: bishop/queen diagonals
     for(const [dr,dc] of DIRS.B){
       let pr=r+dr, pc=c+dc;
       while(inBounds(pr,pc)){
@@ -489,6 +432,7 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
         pr+=dr; pc+=dc;
       }
     }
+    // sliding: rook/queen orthogonals
     for(const [dr,dc] of DIRS.R){
       let pr=r+dr, pc=c+dc;
       while(inBounds(pr,pc)){
@@ -517,6 +461,7 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
     return isSquareAttacked(state, k.r, k.c, color==='w'?'b':'w');
   }
 
+  // pseudo-legal moves for the piece at r,c (does not filter for leaving own king in check)
   function pseudoMoves(state, r, c){
     const b = state.board;
     const p = b[r][c];
@@ -534,6 +479,7 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
     if(p.type==='N' || p.type==='K'){
       for(const [dr,dc] of DIRS[p.type]) addIfOk(r+dr, c+dc);
       if(p.type==='K'){
+        // castling
         const home = p.color==='w' ? 7 : 0;
         if(r===home && c===4){
           const rights = state.castling;
@@ -570,12 +516,14 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
       const dir = p.color==='w' ? -1 : 1;
       const startRow = p.color==='w' ? 6 : 1;
       const lastRow = p.color==='w' ? 0 : 7;
+      // forward
       if(inBounds(r+dir,c) && !b[r+dir][c]){
         pushPawn(r+dir, c, false);
         if(r===startRow && !b[r+2*dir][c]){
           moves.push({from:{r,c}, to:{r:r+2*dir,c}, capture:false, double:true});
         }
       }
+      // captures
       for(const dc of [-1,1]){
         const tr=r+dir, tc=c+dc;
         if(!inBounds(tr,tc)) continue;
@@ -605,6 +553,7 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
     const p = b[move.from.r][move.from.c];
     const movingColor = p.color;
 
+    // en passant capture removes the pawn behind the destination
     if(move.enpassant){
       const capRow = movingColor==='w' ? move.to.r+1 : move.to.r-1;
       b[capRow][move.to.c] = null;
@@ -613,12 +562,14 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
     b[move.to.r][move.to.c] = {type: move.promotion || p.type, color: movingColor};
     b[move.from.r][move.from.c] = null;
 
+    // castling: move the rook too
     if(move.castle){
       const home = move.from.r;
       if(move.castle==='K'){ b[home][5] = b[home][7]; b[home][7] = null; }
       else { b[home][3] = b[home][0]; b[home][0] = null; }
     }
 
+    // update castling rights
     if(p.type==='K'){
       if(movingColor==='w'){ s.castling.wK=false; s.castling.wQ=false; }
       else { s.castling.bK=false; s.castling.bQ=false; }
@@ -632,6 +583,7 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
     killRookRight(move.from.r, move.from.c);
     killRookRight(move.to.r, move.to.c);
 
+    // en passant target for next move
     s.ep = move.double ? {r:(move.from.r+move.to.r)/2, c:move.from.c} : null;
 
     s.halfmove = (move.capture || p.type==='P') ? 0 : s.halfmove+1;
@@ -675,8 +627,8 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
   // UI + networking
   // ---------------------------------------------------------------------
   let state = newGameState();
-  let myColor = null;
-  let selected = null;
+  let myColor = null;       // 'w' | 'b' | 'spectator'
+  let selected = null;      // {r,c}
   let legalForSelected = [];
   let lastMove = null;
   let ws = null;
@@ -684,15 +636,11 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
   let bothConnected = false;
   let whiteConnected = false;
   let blackConnected = false;
-  let flip = false;
-  let squareEls = null;
-  let resignedColor = null;
-  let awaitingRestartApproval = false;
+  let flip = false;         // true = show the board from Black's side (rank 8 at the bottom)
+  let squareEls = null;     // [r][c] -> DOM element, built once per orientation
+  let resignedColor = null; // 'w' | 'b' | null — set once someone resigns
+  let awaitingRestartApproval = false; // true once WE'VE asked to restart and are waiting
   let restartRetryTimer = null;
-  let gameEnded = false;
-  let gameResult = null;
-  let awaitingRematch = false;
-  let rematchAccepted = false;
 
   const boardEl = document.getElementById('board');
   const coordsEl = document.getElementById('coords-file');
@@ -709,11 +657,6 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
   const capturedByWhiteEl = document.getElementById('captured-by-white');
   const capturedByBlackEl = document.getElementById('captured-by-black');
   const restartBanner = document.getElementById('restart-request-banner');
-  const gameOverOverlay = document.getElementById('game-over-overlay');
-  const rematchWaitingBanner = document.getElementById('rematch-waiting-banner');
-  const resultText = document.getElementById('result-text');
-  const resultSub = document.getElementById('result-sub');
-  const nextMatchBtn = document.getElementById('next-match-btn');
 
   function showRestartBanner(text, buttons){
     restartBanner.innerHTML = '';
@@ -750,6 +693,11 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
   }
   updateCoordLabels();
 
+  // Builds the 64 square elements once (in the correct visual order for the
+  // current orientation) and wires up their click handlers. After this,
+  // render() only ever updates the *content* of these existing elements —
+  // it never tears down and rebuilds the grid, so moves update instantly
+  // without any full-page flicker or "refresh" feeling.
   function buildBoard(){
     boardEl.innerHTML = '';
     squareEls = Array.from({length:8}, ()=>Array(8).fill(null));
@@ -774,43 +722,6 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
     updateCoordLabels();
   }
 
-  function showGameOver(winner, reason){
-    gameEnded = true;
-    gameResult = { winner, reason };
-    const isWhite = myColor === 'w';
-    const isBlack = myColor === 'b';
-    const won = (winner === 'w' && isWhite) || (winner === 'b' && isBlack);
-    const isDraw = reason === 'stalemate' || reason === 'draw';
-    
-    if(isDraw){
-      resultText.textContent = 'Draw';
-      resultSub.textContent = reason === 'stalemate' ? 'Stalemate' : '50-move rule';
-    } else if(won){
-      resultText.textContent = 'You win! 🎉';
-      resultSub.textContent = reason === 'checkmate' ? 'Checkmate' : 'Opponent resigned';
-    } else if(myColor === 'spectator'){
-      resultText.textContent = `${winner === 'w' ? 'White' : 'Black'} wins`;
-      resultSub.textContent = reason === 'checkmate' ? 'Checkmate' : 'Resignation';
-    } else {
-      resultText.textContent = 'You lose';
-      resultSub.textContent = reason === 'checkmate' ? 'Checkmate' : 'You resigned';
-    }
-    gameOverOverlay.classList.add('show');
-    rematchWaitingBanner.classList.remove('show');
-  }
-
-  function hideGameOver(){
-    gameEnded = false;
-    gameResult = null;
-    gameOverOverlay.classList.remove('show');
-    rematchWaitingBanner.classList.remove('show');
-  }
-
-  function showRematchWaiting(){
-    rematchWaitingBanner.classList.add('show');
-    gameOverOverlay.classList.remove('show');
-  }
-
   function render(){
     if(!squareEls) buildBoard();
     const status = gameStatus(state);
@@ -832,6 +743,8 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
         if(p){
           const span = document.createElement('span');
           span.className = 'pc ' + (p.color==='w' ? 'piece-white' : 'piece-black');
+          // append U+FE0E so browsers render these as plain colorable glyphs
+          // instead of pre-colored emoji, which is what washes out the color
           span.textContent = PIECE_GLYPH[p.color+p.type] + '\uFE0E';
           sq.appendChild(span);
         }
@@ -858,11 +771,15 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
     else statusText = `${turnName} to move`;
     gameStatusEl.textContent = statusText;
 
+    // highlight whichever badge belongs to the side that's actually to move
+    const whiteTurn = bothConnected && state.turn==='w' && !resignedColor;
+    const blackTurn = bothConnected && state.turn==='b' && !resignedColor;
     badgeWhite.innerHTML = '<span class="dot dot-white"></span>White' + (whiteConnected?' ●':'');
-    badgeWhite.className = 'badge ' + (whiteConnected?'on':'off') + (state.turn==='w' && bothConnected && !resignedColor && !gameEnded ? ' turn':'');
+    badgeWhite.className = 'badge ' + (whiteConnected?'on':'off') + (whiteTurn?' turn':'');
     badgeBlack.innerHTML = '<span class="dot dot-black"></span>Black' + (blackConnected?' ●':'');
-    badgeBlack.className = 'badge ' + (blackConnected?'on':'off') + (state.turn==='b' && bothConnected && !resignedColor && !gameEnded ? ' turn':'');
+    badgeBlack.className = 'badge ' + (blackConnected?'on':'off') + (blackTurn?' turn':'');
 
+    // captured-pieces tracker: pieces WHITE has taken are Black pieces, and vice versa
     capturedByWhiteEl.innerHTML = capturedBlack.map(t=>
       `<span class="pc piece-black">${PIECE_GLYPH['b'+t]}\uFE0E</span>`).join('');
     capturedByBlackEl.innerHTML = capturedWhite.map(t=>
@@ -871,10 +788,9 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
 
   function onSquareClick(r,c){
     if(pendingPromotion) return;
-    if(!bothConnected) return;
-    if(gameEnded) return;
-    if(resignedColor) return;
-    if(myColor!=='w' && myColor!=='b') return;
+    if(!bothConnected) return; // wait until both White and Black have joined
+    if(resignedColor) return; // game already ended by resignation
+    if(myColor!=='w' && myColor!=='b') return; // spectators can't move
     if(state.turn!==myColor) return;
 
     const status = gameStatus(state);
@@ -885,6 +801,9 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
     if(selected){
       const move = legalForSelected.find(m=>m.to.r===r && m.to.c===c);
       if(move){
+        if(move.promotion && move.promotion!=='Q'){
+          // only offer promotion picker once (dedupe the 4 promo entries)
+        }
         const promoMoves = legalForSelected.filter(m=>m.to.r===r && m.to.c===c && m.promotion);
         if(promoMoves.length>0){
           askPromotion(promoMoves, mv=>doMove(mv));
@@ -893,6 +812,7 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
         }
         return;
       }
+      // clicking own another piece re-selects
       if(p && p.color===myColor){
         selectSquare(r,c);
       } else {
@@ -935,8 +855,9 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
   }
 
   let appliedMoveCount = 0;
-  let capturedWhite = [];
-  let capturedBlack = [];
+
+  let capturedWhite = []; // piece types of WHITE pieces that have been captured (i.e. taken by Black)
+  let capturedBlack = []; // piece types of BLACK pieces that have been captured (i.e. taken by White)
 
   function recordCapture(beforeState, move){
     if(!move.capture) return;
@@ -952,6 +873,10 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
     else capturedBlack.push(capturedPiece.type);
   }
 
+  // Classic FLIP animation: the grid squares themselves never move, so we
+  // just need the pixel offset between the two (already-rendered) squares.
+  // Snap the piece back to where it visually was with no transition, then
+  // release it with one — the browser animates the slide for us.
   const raf = (typeof requestAnimationFrame==='function') ? requestAnimationFrame : (fn)=>setTimeout(fn,16);
   function animatePieceSlide(fromR, fromC, toR, toC){
     if(!squareEls) return;
@@ -967,22 +892,11 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
     if(!dx && !dy) return;
     pieceSpan.style.transition = 'none';
     pieceSpan.style.transform = `translate(${dx}px, ${dy}px)`;
-    void pieceSpan.offsetWidth;
+    void pieceSpan.offsetWidth; // force reflow so the browser registers the start position
     raf(()=>{
       pieceSpan.style.transition = 'transform 200ms cubic-bezier(.2,.7,.3,1)';
       pieceSpan.style.transform = 'translate(0,0)';
     });
-  }
-
-  function checkGameEndAfterMove(){
-    const status = gameStatus(state);
-    if(status.kind==='checkmate'){
-      showGameOver(status.winner, 'checkmate');
-      sendMsg({type:'gameOver', winner: status.winner, reason: 'checkmate'});
-    } else if(status.kind==='stalemate' || status.kind==='draw'){
-      showGameOver(null, status.kind);
-      sendMsg({type:'gameOver', winner: null, reason: status.kind});
-    }
   }
 
   function doMove(move){
@@ -1000,7 +914,6 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
       else animatePieceSlide(home,0,home,3);
     }
     sendMsg({type:'move', move});
-    checkGameEndAfterMove();
   }
 
   function applyRemoteMove(move){
@@ -1017,15 +930,26 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
       if(move.castle==='K') animatePieceSlide(home,7,home,5);
       else animatePieceSlide(home,0,home,3);
     }
-    checkGameEndAfterMove();
   }
 
+  // Rebuilds the board from scratch by replaying the server's authoritative
+  // move history. Used when this client first connects (so a player who
+  // joins mid-game starts from the correct position instead of a blank
+  // board), and is called periodically + on every reconnect/visibility
+  // change as a self-healing safety net. If we're already caught up this
+  // is a cheap no-op, so it never disrupts an in-progress selection.
   function syncFromHistory(moves){
     if(moves.length === appliedMoveCount) return;
+    // The common case: we're catching up by exactly one move (e.g. the live
+    // push got delayed and this periodic re-sync is what actually delivers
+    // it). Route it through the normal animated move path so it still
+    // slides smoothly instead of snapping into place.
     if(moves.length === appliedMoveCount + 1 && appliedMoveCount > 0){
       applyRemoteMove(moves[moves.length - 1]);
       return;
     }
+    // Bulk catch-up (first connect, or behind by more than one move) —
+    // snap straight to the final position instead of animating each step.
     state = newGameState();
     lastMove = null;
     selected = null; legalForSelected = [];
@@ -1055,21 +979,15 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
     historyEl.scrollTop = historyEl.scrollHeight;
   }
 
-  function resetGame(broadcast, keepOverlay){
+  function resetGame(broadcast){
     state = newGameState();
     selected = null; legalForSelected = []; lastMove = null;
     appliedMoveCount = 0;
     capturedWhite = []; capturedBlack = [];
     resignedColor = null;
-    gameEnded = false;
-    gameResult = null;
     awaitingRestartApproval = false;
-    awaitingRematch = false;
-    rematchAccepted = false;
     clearInterval(restartRetryTimer);
     hideRestartBanner();
-    if(!keepOverlay) hideGameOver();
-    rematchWaitingBanner.classList.remove('show');
     historyEl.innerHTML = '';
     render();
     if(broadcast) sendMsg({type:'reset'});
@@ -1083,6 +1001,13 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
     sendMsg({type:'requestSync'});
   }
 
+  // Belt-and-suspenders self-healing: browsers can silently pause/"sleep"
+  // an inactive tab or window to save power, which can delay delivery of
+  // live WebSocket messages until you interact with it again. Rather than
+  // rely purely on push updates, poll for the authoritative state every
+  // few seconds (cheap — it's a no-op unless we're actually behind) and
+  // also re-sync immediately the moment this window becomes visible/
+  // focused again, so you never need to manually refresh.
   setInterval(requestSync, 1200);
   document.addEventListener('visibilitychange', ()=>{
     if(document.visibilityState === 'visible') requestSync();
@@ -1100,21 +1025,9 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
     const room = document.getElementById('room-name').value.trim() || 'lobby';
     if(addr) connect(addr, room);
   });
-
   document.getElementById('reset-btn').addEventListener('click', ()=>{
-    // If game ended, just reset immediately
-    if(gameEnded){
-      resetGame(true);
-      return;
-    }
-    // If opponent resigned, reset immediately
-    if(resignedColor){
-      resetGame(true);
-      return;
-    }
-    if(!bothConnected){ resetGame(true); return; }
+    if(!bothConnected){ resetGame(true); return; } // no one to ask permission from
     if(awaitingRestartApproval) return;
-    
     awaitingRestartApproval = true;
     sendMsg({type:'restartRequest'});
     clearInterval(restartRetryTimer);
@@ -1132,27 +1045,13 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
       }}
     ]);
   });
-
   document.getElementById('resign-btn').addEventListener('click', ()=>{
     if(myColor!=='w' && myColor!=='b') return;
     if(resignedColor) return;
-    if(gameEnded) return;
     resignedColor = myColor;
     sendMsg({type:'resign', color: myColor});
-    // Show game over for the resigning player
-    showGameOver(myColor === 'w' ? 'b' : 'w', 'resignation');
     render();
   });
-
-  // Next Match button
-  nextMatchBtn.addEventListener('click', ()=>{
-    if(!gameEnded) return;
-    // Send rematch request to opponent
-    sendMsg({type:'rematchRequest'});
-    // Show waiting banner on this player's screen
-    showRematchWaiting();
-  });
-
   document.getElementById('server-addr').addEventListener('keydown', e=>{
     if(e.key==='Enter') document.getElementById('connect-btn').click();
   });
@@ -1191,122 +1090,53 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
     ws.addEventListener('message', (ev)=>{
       let msg;
       try{ msg = JSON.parse(ev.data); } catch { return; }
-      
-      switch(msg.type){
-        case 'assign':
-          myColor = msg.color==='white'?'w':msg.color==='black'?'b':'spectator';
-          setOrientation(myColor);
-          render();
-          break;
-          
-        case 'sync':
-          syncFromHistory(msg.moves);
-          break;
-          
-        case 'presence':
-          whiteConnected = !!msg.white;
-          blackConnected = !!msg.black;
-          bothConnected = whiteConnected && blackConnected;
-          boardWrap.classList.toggle('waiting', !bothConnected);
-          if(bothConnected){
-            sharePanel.style.display = 'none';
-            waitingBanner.style.display = 'none';
-          } else {
-            const missing = !whiteConnected ? 'White' : 'Black';
-            waitingBanner.textContent = `Waiting for ${missing} to join\u2026`;
-            waitingBanner.style.display = 'block';
-          }
-          render();
-          break;
-          
-        case 'move':
-          applyRemoteMove(msg.move);
-          break;
-          
-        case 'reset':
-          resetGame(false);
-          hideGameOver();
-          break;
-          
-        case 'resign':
-          // Opponent resigned - show game over for this player
-          resignedColor = msg.color;
-          showGameOver(msg.color === 'w' ? 'b' : 'w', 'resignation');
-          render();
-          break;
-          
-        case 'gameOver':
-          showGameOver(msg.winner, msg.reason);
-          render();
-          break;
-          
-        case 'restartRequest':
-          // Only show the banner if NOT the one who requested
-          if(!awaitingRestartApproval){
-            const requesterName = myColor==='w' ? 'Black' : 'White';
-            showRestartBanner(`${requesterName} wants to start a new game.`, [
-              {label:'Accept', onClick:()=>{ 
-                sendMsg({type:'restartAccept'}); 
-                resetGame(true); 
-                hideRestartBanner();
-              }},
-              {label:'Decline', onClick:()=>{ 
-                sendMsg({type:'restartDecline'}); 
-                hideRestartBanner();
-              }}
-            ]);
-          }
-          break;
-          
-        case 'restartAccept':
-          awaitingRestartApproval = false;
-          clearInterval(restartRetryTimer);
-          hideRestartBanner();
-          break;
-          
-        case 'restartDecline':
-          awaitingRestartApproval = false;
-          clearInterval(restartRetryTimer);
-          showRestartBanner('Your request to start a new game was declined.', [
-            {label:'OK', onClick: hideRestartBanner}
-          ]);
-          break;
-          
-        case 'restartCancel':
-          hideRestartBanner();
-          break;
-          
-        case 'rematchRequest':
-          // Opponent wants a rematch
-          showRestartBanner('Your opponent wants a rematch!', [
-            {label:'Accept', onClick:()=>{ 
-              sendMsg({type:'rematchAccept'}); 
-              resetGame(true); 
-              hideRestartBanner();
-            }},
-            {label:'Decline', onClick:()=>{ 
-              sendMsg({type:'rematchDecline'}); 
-              hideRestartBanner();
-            }}
-          ]);
-          break;
-          
-        case 'rematchAccept':
-          // Opponent accepted the rematch
-          rematchAccepted = true;
-          hideRestartBanner();
-          resetGame(true);
-          break;
-          
-        case 'rematchDecline':
-          // Opponent declined the rematch
-          hideRestartBanner();
-          showRestartBanner('Your opponent declined the rematch.', [
-            {label:'OK', onClick: hideRestartBanner}
-          ]);
-          // Remove the waiting banner if it was showing
-          rematchWaitingBanner.classList.remove('show');
-          break;
+      if(msg.type==='assign'){
+        myColor = msg.color==='white'?'w':msg.color==='black'?'b':'spectator';
+        setOrientation(myColor);
+        render();
+      } else if(msg.type==='sync'){
+        syncFromHistory(msg.moves);
+      } else if(msg.type==='presence'){
+        whiteConnected = !!msg.white;
+        blackConnected = !!msg.black;
+        bothConnected = whiteConnected && blackConnected;
+        boardWrap.classList.toggle('waiting', !bothConnected);
+        if(bothConnected){
+          sharePanel.style.display = 'none';
+          waitingBanner.style.display = 'none';
+        } else {
+          const missing = !whiteConnected ? 'White' : 'Black';
+          waitingBanner.textContent = `Waiting for ${missing} to join\u2026`;
+          waitingBanner.style.display = 'block';
+        }
+        render();
+      } else if(msg.type==='move'){
+        applyRemoteMove(msg.move);
+      } else if(msg.type==='reset'){
+        resetGame(false);
+      } else if(msg.type==='resign'){
+        resignedColor = msg.color;
+        render();
+      } else if(msg.type==='restartRequest'){
+        const requesterName = myColor==='w' ? 'Black' : 'White';
+        showRestartBanner(`${requesterName} wants to start a new game.`, [
+          {label:'Accept', onClick:()=>{ sendMsg({type:'restartAccept'}); resetGame(true); }},
+          {label:'Decline', onClick:()=>{ sendMsg({type:'restartDecline'}); hideRestartBanner(); }}
+        ]);
+      } else if(msg.type==='restartAccept'){
+        awaitingRestartApproval = false;
+        clearInterval(restartRetryTimer);
+        hideRestartBanner();
+        // the accepting player also sends an actual 'reset', which arrives
+        // right after this and resets the board — nothing else to do here
+      } else if(msg.type==='restartDecline'){
+        awaitingRestartApproval = false;
+        clearInterval(restartRetryTimer);
+        showRestartBanner('Your request to start a new game was declined.', [
+          {label:'OK', onClick: hideRestartBanner}
+        ]);
+      } else if(msg.type==='restartCancel'){
+        hideRestartBanner();
       }
     });
 
@@ -1334,7 +1164,7 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
     if(!addrInput.value) addrInput.value = location.host;
   }
 
-  // --- auto-connect ---
+  // --- auto-connect using the address this page was loaded from ---
   (function autoConnect(){
     const params = new URLSearchParams(location.search);
     const room = params.get('room') || 'lobby';

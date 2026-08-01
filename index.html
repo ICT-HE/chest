@@ -299,6 +299,29 @@
     padding:8px 24px;
   }
 
+  #rematch-waiting-banner{
+    position:absolute;
+    inset:0;
+    background:rgba(10,14,11,.85);
+    display:none;
+    align-items:center;
+    justify-content:center;
+    flex-direction:column;
+    z-index:10;
+    border-radius:2px;
+  }
+  #rematch-waiting-banner.show{ display:flex; }
+  #rematch-waiting-banner .text{
+    font-size:1.2rem;
+    color:var(--gold);
+    margin-bottom:4px;
+    letter-spacing:.04em;
+  }
+  #rematch-waiting-banner .sub{
+    font-size:.9rem;
+    color:var(--text-dim);
+  }
+
   footer{
     margin-top:26px; color:#5c6a61; font-size:.72rem; text-align:center; max-width:480px;
   }
@@ -351,6 +374,10 @@
     <div class="sub" id="result-sub">Checkmate</div>
     <button id="next-match-btn">Next Match</button>
   </div>
+  <div id="rematch-waiting-banner">
+    <div class="text">Waiting for opponent...</div>
+    <div class="sub">They need to accept the rematch</div>
+  </div>
   <div id="coords-file"></div>
 </div>
 
@@ -368,7 +395,7 @@
 
 <footer>
 Run <code>node server.js</code> on any one computer in the shop, then have every player open this page and connect to that computer's LAN address. No internet required.
-<br><span style="opacity:.5;">build 2026-08-01.7</span>
+<br><span style="opacity:.5;">build 2026-08-01.8</span>
 </footer>
 
 <script>
@@ -381,7 +408,7 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
   const FILES = ['a','b','c','d','e','f','g','h'];
   const PIECE_GLYPH = {
     wK:'♚', wQ:'♛', wR:'♜', wB:'♝', wN:'♞', wP:'♟',
-    bK:'♚', bQ:'♛', bR:'♜', bB:'♝', bN:'♞', bP:'♟'
+    bK:'♚', bQ:'♛', bR:'♜', wB:'♝', wN:'♞', wP:'♟'
   };
 
   function initBoard(){
@@ -664,6 +691,8 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
   let restartRetryTimer = null;
   let gameEnded = false;
   let gameResult = null;
+  let awaitingRematch = false;
+  let rematchAccepted = false;
 
   const boardEl = document.getElementById('board');
   const coordsEl = document.getElementById('coords-file');
@@ -681,6 +710,7 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
   const capturedByBlackEl = document.getElementById('captured-by-black');
   const restartBanner = document.getElementById('restart-request-banner');
   const gameOverOverlay = document.getElementById('game-over-overlay');
+  const rematchWaitingBanner = document.getElementById('rematch-waiting-banner');
   const resultText = document.getElementById('result-text');
   const resultSub = document.getElementById('result-sub');
   const nextMatchBtn = document.getElementById('next-match-btn');
@@ -766,11 +796,18 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
       resultSub.textContent = reason === 'checkmate' ? 'Checkmate' : 'You resigned';
     }
     gameOverOverlay.classList.add('show');
+    rematchWaitingBanner.classList.remove('show');
   }
 
   function hideGameOver(){
     gameEnded = false;
     gameResult = null;
+    gameOverOverlay.classList.remove('show');
+    rematchWaitingBanner.classList.remove('show');
+  }
+
+  function showRematchWaiting(){
+    rematchWaitingBanner.classList.add('show');
     gameOverOverlay.classList.remove('show');
   }
 
@@ -1027,9 +1064,12 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
     gameEnded = false;
     gameResult = null;
     awaitingRestartApproval = false;
+    awaitingRematch = false;
+    rematchAccepted = false;
     clearInterval(restartRetryTimer);
     hideRestartBanner();
     if(!keepOverlay) hideGameOver();
+    rematchWaitingBanner.classList.remove('show');
     historyEl.innerHTML = '';
     render();
     if(broadcast) sendMsg({type:'reset'});
@@ -1106,8 +1146,11 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
 
   // Next Match button
   nextMatchBtn.addEventListener('click', ()=>{
-    hideGameOver();
-    resetGame(true);
+    if(!gameEnded) return;
+    // Send rematch request to opponent
+    sendMsg({type:'rematchRequest'});
+    // Show waiting banner on this player's screen
+    showRematchWaiting();
   });
 
   document.getElementById('server-addr').addEventListener('keydown', e=>{
@@ -1231,6 +1274,38 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
           
         case 'restartCancel':
           hideRestartBanner();
+          break;
+          
+        case 'rematchRequest':
+          // Opponent wants a rematch
+          showRestartBanner('Your opponent wants a rematch!', [
+            {label:'Accept', onClick:()=>{ 
+              sendMsg({type:'rematchAccept'}); 
+              resetGame(true); 
+              hideRestartBanner();
+            }},
+            {label:'Decline', onClick:()=>{ 
+              sendMsg({type:'rematchDecline'}); 
+              hideRestartBanner();
+            }}
+          ]);
+          break;
+          
+        case 'rematchAccept':
+          // Opponent accepted the rematch
+          rematchAccepted = true;
+          hideRestartBanner();
+          resetGame(true);
+          break;
+          
+        case 'rematchDecline':
+          // Opponent declined the rematch
+          hideRestartBanner();
+          showRestartBanner('Your opponent declined the rematch.', [
+            {label:'OK', onClick: hideRestartBanner}
+          ]);
+          // Remove the waiting banner if it was showing
+          rematchWaitingBanner.classList.remove('show');
           break;
       }
     });

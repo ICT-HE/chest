@@ -271,7 +271,6 @@
   .promo-row{ display:flex; gap:10px; justify-content:center; margin-top:14px; }
   .promo-row button{ font-size:1.6rem; padding:8px 14px; }
 
-  /* Game over overlay */
   #game-over-overlay{
     position:absolute;
     inset:0;
@@ -369,7 +368,7 @@
 
 <footer>
 Run <code>node server.js</code> on any one computer in the shop, then have every player open this page and connect to that computer's LAN address. No internet required.
-<br><span style="opacity:.5;">build 2026-08-01.4</span>
+<br><span style="opacity:.5;">build 2026-08-01.6</span>
 </footer>
 
 <script>
@@ -377,7 +376,7 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
   "use strict";
 
   // ---------------------------------------------------------------------
-  // Chess engine
+  // Chess engine (full implementation)
   // ---------------------------------------------------------------------
   const FILES = ['a','b','c','d','e','f','g','h'];
   const PIECE_GLYPH = {
@@ -664,7 +663,7 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
   let awaitingRestartApproval = false;
   let restartRetryTimer = null;
   let gameEnded = false;
-  let gameResult = null; // { winner: 'w'|'b', reason: 'checkmate'|'resignation'|'stalemate'|'draw' }
+  let gameResult = null;
 
   const boardEl = document.getElementById('board');
   const coordsEl = document.getElementById('coords-file');
@@ -749,13 +748,15 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
     gameEnded = true;
     gameResult = { winner, reason };
     const isWhite = myColor === 'w';
-    const won = (winner === 'w' && isWhite) || (winner === 'b' && !isWhite && myColor !== 'spectator');
+    const isBlack = myColor === 'b';
+    const won = (winner === 'w' && isWhite) || (winner === 'b' && isBlack);
     const isDraw = reason === 'stalemate' || reason === 'draw';
+    
     if(isDraw){
       resultText.textContent = 'Draw';
       resultSub.textContent = reason === 'stalemate' ? 'Stalemate' : '50-move rule';
     } else if(won){
-      resultText.textContent = 'You win!';
+      resultText.textContent = 'You win! 🎉';
       resultSub.textContent = reason === 'checkmate' ? 'Checkmate' : 'Opponent resigned';
     } else if(myColor === 'spectator'){
       resultText.textContent = `${winner === 'w' ? 'White' : 'Black'} wins`;
@@ -821,9 +822,9 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
     gameStatusEl.textContent = statusText;
 
     badgeWhite.innerHTML = '<span class="dot dot-white"></span>White' + (whiteConnected?' ●':'');
-    badgeWhite.className = 'badge ' + (whiteConnected?'on':'off') + (state.turn==='w' && bothConnected && !resignedColor ? ' turn':'');
+    badgeWhite.className = 'badge ' + (whiteConnected?'on':'off') + (state.turn==='w' && bothConnected && !resignedColor && !gameEnded ? ' turn':'');
     badgeBlack.innerHTML = '<span class="dot dot-black"></span>Black' + (blackConnected?' ●':'');
-    badgeBlack.className = 'badge ' + (blackConnected?'on':'off') + (state.turn==='b' && bothConnected && !resignedColor ? ' turn':'');
+    badgeBlack.className = 'badge ' + (blackConnected?'on':'off') + (state.turn==='b' && bothConnected && !resignedColor && !gameEnded ? ' turn':'');
 
     capturedByWhiteEl.innerHTML = capturedBlack.map(t=>
       `<span class="pc piece-black">${PIECE_GLYPH['b'+t]}\uFE0E</span>`).join('');
@@ -1061,12 +1062,19 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
   });
 
   document.getElementById('reset-btn').addEventListener('click', ()=>{
+    // If game ended, just reset immediately
     if(gameEnded){
+      resetGame(true);
+      return;
+    }
+    // If opponent resigned, reset immediately
+    if(resignedColor){
       resetGame(true);
       return;
     }
     if(!bothConnected){ resetGame(true); return; }
     if(awaitingRestartApproval) return;
+    
     awaitingRestartApproval = true;
     sendMsg({type:'restartRequest'});
     clearInterval(restartRetryTimer);
@@ -1091,6 +1099,7 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
     if(gameEnded) return;
     resignedColor = myColor;
     sendMsg({type:'resign', color: myColor});
+    // Show game over for the resigning player
     showGameOver(myColor === 'w' ? 'b' : 'w', 'resignation');
     render();
   });
@@ -1139,55 +1148,90 @@ Run <code>node server.js</code> on any one computer in the shop, then have every
     ws.addEventListener('message', (ev)=>{
       let msg;
       try{ msg = JSON.parse(ev.data); } catch { return; }
-      if(msg.type==='assign'){
-        myColor = msg.color==='white'?'w':msg.color==='black'?'b':'spectator';
-        setOrientation(myColor);
-        render();
-      } else if(msg.type==='sync'){
-        syncFromHistory(msg.moves);
-      } else if(msg.type==='presence'){
-        whiteConnected = !!msg.white;
-        blackConnected = !!msg.black;
-        bothConnected = whiteConnected && blackConnected;
-        boardWrap.classList.toggle('waiting', !bothConnected);
-        if(bothConnected){
-          sharePanel.style.display = 'none';
-          waitingBanner.style.display = 'none';
-        } else {
-          const missing = !whiteConnected ? 'White' : 'Black';
-          waitingBanner.textContent = `Waiting for ${missing} to join\u2026`;
-          waitingBanner.style.display = 'block';
-        }
-        render();
-      } else if(msg.type==='move'){
-        applyRemoteMove(msg.move);
-      } else if(msg.type==='reset'){
-        resetGame(false);
-      } else if(msg.type==='resign'){
-        resignedColor = msg.color;
-        showGameOver(msg.color === 'w' ? 'b' : 'w', 'resignation');
-        render();
-      } else if(msg.type==='gameOver'){
-        showGameOver(msg.winner, msg.reason);
-        render();
-      } else if(msg.type==='restartRequest'){
-        const requesterName = myColor==='w' ? 'Black' : 'White';
-        showRestartBanner(`${requesterName} wants to start a new game.`, [
-          {label:'Accept', onClick:()=>{ sendMsg({type:'restartAccept'}); resetGame(true); }},
-          {label:'Decline', onClick:()=>{ sendMsg({type:'restartDecline'}); hideRestartBanner(); }}
-        ]);
-      } else if(msg.type==='restartAccept'){
-        awaitingRestartApproval = false;
-        clearInterval(restartRetryTimer);
-        hideRestartBanner();
-      } else if(msg.type==='restartDecline'){
-        awaitingRestartApproval = false;
-        clearInterval(restartRetryTimer);
-        showRestartBanner('Your request to start a new game was declined.', [
-          {label:'OK', onClick: hideRestartBanner}
-        ]);
-      } else if(msg.type==='restartCancel'){
-        hideRestartBanner();
+      
+      switch(msg.type){
+        case 'assign':
+          myColor = msg.color==='white'?'w':msg.color==='black'?'b':'spectator';
+          setOrientation(myColor);
+          render();
+          break;
+          
+        case 'sync':
+          syncFromHistory(msg.moves);
+          break;
+          
+        case 'presence':
+          whiteConnected = !!msg.white;
+          blackConnected = !!msg.black;
+          bothConnected = whiteConnected && blackConnected;
+          boardWrap.classList.toggle('waiting', !bothConnected);
+          if(bothConnected){
+            sharePanel.style.display = 'none';
+            waitingBanner.style.display = 'none';
+          } else {
+            const missing = !whiteConnected ? 'White' : 'Black';
+            waitingBanner.textContent = `Waiting for ${missing} to join\u2026`;
+            waitingBanner.style.display = 'block';
+          }
+          render();
+          break;
+          
+        case 'move':
+          applyRemoteMove(msg.move);
+          break;
+          
+        case 'reset':
+          resetGame(false);
+          hideGameOver();
+          break;
+          
+        case 'resign':
+          // Opponent resigned - show game over for this player
+          resignedColor = msg.color;
+          showGameOver(msg.color === 'w' ? 'b' : 'w', 'resignation');
+          render();
+          break;
+          
+        case 'gameOver':
+          showGameOver(msg.winner, msg.reason);
+          render();
+          break;
+          
+        case 'restartRequest':
+          // Only show the banner if NOT the one who requested
+          if(!awaitingRestartApproval){
+            const requesterName = myColor==='w' ? 'Black' : 'White';
+            showRestartBanner(`${requesterName} wants to start a new game.`, [
+              {label:'Accept', onClick:()=>{ 
+                sendMsg({type:'restartAccept'}); 
+                resetGame(true); 
+                hideRestartBanner();
+              }},
+              {label:'Decline', onClick:()=>{ 
+                sendMsg({type:'restartDecline'}); 
+                hideRestartBanner();
+              }}
+            ]);
+          }
+          break;
+          
+        case 'restartAccept':
+          awaitingRestartApproval = false;
+          clearInterval(restartRetryTimer);
+          hideRestartBanner();
+          break;
+          
+        case 'restartDecline':
+          awaitingRestartApproval = false;
+          clearInterval(restartRetryTimer);
+          showRestartBanner('Your request to start a new game was declined.', [
+            {label:'OK', onClick: hideRestartBanner}
+          ]);
+          break;
+          
+        case 'restartCancel':
+          hideRestartBanner();
+          break;
       }
     });
 
